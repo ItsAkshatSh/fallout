@@ -1,11 +1,35 @@
 <script>
   let email = "";
   let submitted = false;
+  let submitting = false;
+  let error = "";
 
-  function submit() {
-    if (!email) return;
-    submitted = true;
-    email = "";
+  async function submit() {
+    if (!email || submitting) return;
+    submitting = true;
+    error = "";
+
+    try {
+      const formData = new FormData();
+      formData.append("Email", email);
+
+      const res = await fetch("/api/rsvp", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to submit");
+      }
+
+      submitted = true;
+      email = "";
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Something went wrong";
+    } finally {
+      submitting = false;
+    }
   }
 </script>
 
@@ -45,7 +69,7 @@
 
   {#if submitted}
     <div class="success-message">
-      Cheers! An email will be coming in 13 days...
+      Cheers! An email will be coming in the next weeks...
     </div>
   {:else}
     <form class="signup" on:submit|preventDefault={submit}>
@@ -57,7 +81,12 @@
         required
       />
 
-      <button class="go" aria-label="Submit"> &gt; </button>
+      <button class="go" aria-label="Submit" disabled={submitting}>
+        {submitting ? "..." : ">"}
+      </button>
     </form>
+    {#if error}
+      <div class="error-message">{error}</div>
+    {/if}
   {/if}
 </section>
