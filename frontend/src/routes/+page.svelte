@@ -67,7 +67,7 @@
     <!-- Logo with shadow for contrast -->
     <img
       class="w-[220px] md:w-[320px] lg:w-[500px] h-auto drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)]"
-      src="/landing/logo.png"
+      src="/landing/logo.svg"
       alt="Fallout"
     />
 
