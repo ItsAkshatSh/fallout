@@ -6,11 +6,11 @@ default: &default
 
 development:
   <<: *default
-  url: <%= ENV["DATABASE_URL"] || "postgresql://postgres:starter@localhost:5432/hc_rails_starter_development" %>
+  url: <%= ENV["DATABASE_URL"] || "postgresql://postgres:starter@localhost:5432/fallout_development" %>
 
 test:
   <<: *default
-  url: <%= ENV["DATABASE_URL"] || "postgresql://postgres:starter@localhost:5432/hc_rails_starter_test" %>
+  url: <%= ENV["DATABASE_URL"] || "postgresql://postgres:starter@localhost:5432/fallout_test" %>
 
 production:
   <<: *default
