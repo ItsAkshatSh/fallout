@@ -24,6 +24,14 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIsOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   function signOut(e: React.MouseEvent) {
     e.preventDefault()
     router.delete(shared.sign_out_path)
@@ -39,19 +47,25 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
         />
         <div className="flex flex-col -ml-8">
           <button
+            type="button"
+            aria-expanded={isOpen}
+            aria-haspopup="menu"
             onClick={() => setIsOpen(!isOpen)}
             className={`h-16 bg-brown pl-10 pr-5 min-w-40 text-light-brown text-xl flex items-center transition-all duration-200 ${
               isOpen ? 'rounded-tr-2xl' : 'rounded-r-full'
             }`}
           >
-            <p className="-mt-0.5">{displayName}</p>
+            <span className="-mt-0.5">{displayName}</span>
           </button>
           <div
+            aria-hidden={!isOpen}
             className={`bg-brown overflow-hidden transition-all duration-200 rounded-bl-[2rem] rounded-br-2xl ${
               isOpen ? 'max-h-24' : 'max-h-0'
             }`}
           >
             <button
+              type="button"
+              tabIndex={isOpen ? 0 : -1}
               onClick={signOut}
               className="w-full pl-10 pr-5 py-3 text-left text-light-brown text-lg hover:brightness-110 transition-all"
             >
