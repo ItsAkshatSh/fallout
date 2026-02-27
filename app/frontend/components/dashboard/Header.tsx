@@ -26,7 +26,7 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
         <img
           src={avatar}
           alt={displayName}
-          className="top-0 left-0 rounded-full aspect-square size-16 bg-brown border-4 border-brown w-fit z-12"
+          className="top-0 left-0 rounded-full aspect-square size-16 bg-dark-brown border-2 border-dark-brown w-fit z-12"
         />
         <div className="flex flex-col -ml-8">
           <button
@@ -34,14 +34,14 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
             aria-expanded={isOpen}
             aria-haspopup="menu"
             onClick={() => setIsOpen(!isOpen)}
-            className="h-16 bg-brown pl-10 pr-5 min-w-40 text-light-brown text-xl flex items-center rounded-r-full z-11 cursor-pointer"
+            className="h-16 bg-light-brown pl-10 pr-5 min-w-40 border-2 border-dark-brown text-dark-brown text-xl flex items-center rounded-r-full z-11 cursor-pointer"
           >
             <span className="-mt-0.5">{displayName}</span>
           </button>
 
           <div
             aria-hidden={!isOpen}
-            className={`bg-light-brown overflow-hidden transition-all duration-200 rounded-bl-2xl -mt-8 pt-8 ${
+            className={`bg-dark-brown overflow-hidden transition-all duration-200 rounded-bl-2xl -mt-8 pt-8 ${
               isOpen ? 'max-h-24 rounded-br-4xl' : 'max-h-0 rounded-br-4xl'
             }`}
           >
@@ -49,7 +49,7 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
               type="button"
               tabIndex={isOpen ? 0 : -1}
               onClick={signOut}
-              className="w-full pl-10 pr-5 py-3 text-left text-lg hover:brightness-150 transition-all cursor-pointer"
+              className="text-light-brown w-full pl-10 pr-5 py-3 text-left text-lg hover:brightness-150 transition-all cursor-pointer"
             >
               Sign out
             </button>

@@ -8,6 +8,7 @@ import Path from '@/components/dashboard/Path'
 import SignUpCta from '@/components/dashboard/SignUpCta'
 import Leaderboard from '@/components/dashboard/Leaderboard'
 import Header from '@/components/dashboard/Header'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/shared/Tooltip'
 
 type LeaderboardUser = {
   user: string
@@ -66,9 +67,14 @@ export default function DashboardIndex() {
         <button>
           <img src="/icon/guide.png" alt="Guide" className="w-25 cursor-pointer" />
         </button>
-        <ModalLink href="/projects">
-          <img src="/icon/project.png" alt="Projects" className="w-25 cursor-pointer" />
-        </ModalLink>
+        <Tooltip>
+          <TooltipTrigger>
+            <ModalLink href="/projects">
+              <img src="/icon/project.png" alt="Projects" className="w-25 cursor-pointer" />
+            </ModalLink>
+          </TooltipTrigger>
+          <TooltipContent>Projects</TooltipContent>
+        </Tooltip>
         <button>
           <img src="/icon/shop.png" alt="Shop" className="w-25 cursor-pointer" />
         </button>
