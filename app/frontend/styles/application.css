@@ -25,8 +25,8 @@
   --color-background: rgba(65, 88, 97, 0.5);
 }
 
-body {
-  @apply font-outfit bg-light-blue text-dark-brown;
+:root {
+  @apply font-outfit bg-light-blue text-dark-brown overscroll-none;
 }
 
 img {

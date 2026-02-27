@@ -10,7 +10,7 @@ export default function SignUpCta({ onSignUp }: Props) {
       <div className="flex flex-col items-center text-center space-y-4 py-4 mx-4">
         <div className="space-y-1">
           <h3 className="font-bold text-xl">
-            Connect your account
+            Verify your account
             <br />
             to save progress!
           </h3>
@@ -20,7 +20,7 @@ export default function SignUpCta({ onSignUp }: Props) {
           onClick={onSignUp}
           className="py-1.5 px-4 bg-brown text-light-brown border-2 border-dark-brown font-bold w-full uppercase"
         >
-          Sign up
+          Go verify
         </button>
       </div>
     </Frame>

@@ -236,6 +236,10 @@ class User < ApplicationRecord
     earliest_visit_with_ref&.utm_source
   end
 
+  def koi
+    0
+  end
+
   private
 
   def self.determine_is_adult(identity)
@@ -281,9 +285,5 @@ class User < ApplicationRecord
     return slack_id unless Rails.env.development?
 
     slack_id.delete_suffix("_DEV")
-  end
-
-  def koi
-    0
   end
 end

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
+import { usePage } from '@inertiajs/react'
 import Shop from '@/components/Shop'
 import Projects from '@/components/Projects'
 import Path from '@/components/dashboard/Path'
@@ -7,17 +8,26 @@ import SignUpCta from '@/components/dashboard/SignUpCta'
 import Leaderboard from '@/components/dashboard/Leaderboard'
 import Header from '@/components/dashboard/Header'
 
-type User = {
+type LeaderboardUser = {
   user: string
   hours: number
 }
 
+type PageProps = {
+  user: {
+    display_name: string
+    email: string
+    koi: number
+    avatar: string
+  }
+}
+
 export default function DashboardIndex() {
-  const [koiBalance] = useState<number>(11)
+  const { user } = usePage<PageProps>().props
   const [mail] = useState<boolean>(true)
   const [notPressed] = useState<boolean>(true)
   const [loggedIn, setLoggedIn] = useState(false)
-  const [users] = useState<User[]>([
+  const [users] = useState<LeaderboardUser[]>([
     { user: 'John Cena', hours: 100 },
     { user: 'Bobberson', hours: 45 },
     { user: 'randy', hours: 6 },
@@ -42,7 +52,7 @@ export default function DashboardIndex() {
   return (
     <>
       <div className="fixed top-6 left-6 right-6 z-20">
-        <Header koiBalance={koiBalance} mail={mail} />
+        <Header koiBalance={user.koi} mail={mail} avatar={user.avatar} displayName={user.display_name} />
       </div>
 
       <div className="fixed top-6 bottom-6 right-6 z-10 flex items-center pt-[10%]">
