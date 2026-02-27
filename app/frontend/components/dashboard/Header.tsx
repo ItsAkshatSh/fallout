@@ -34,9 +34,9 @@ export default function Header({ koiBalance, mail, avatar, displayName }: Props)
             aria-expanded={isOpen}
             aria-haspopup="menu"
             onClick={() => setIsOpen(!isOpen)}
-            className="h-16 bg-brown pl-10 pr-5 min-w-40 text-light-brown text-xl flex items-center rounded-r-full z-11"
+            className="h-16 bg-brown pl-10 pr-5 min-w-40 text-light-brown text-xl flex items-center rounded-r-full z-11 cursor-pointer"
           >
-            <span className="-mt-0.5">samliu</span>
+            <span className="-mt-0.5">{displayName}</span>
           </button>
 
           <div

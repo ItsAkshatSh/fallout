@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { createInertiaApp } from '@inertiajs/react'
 import { createRoot } from 'react-dom/client'
+import { renderApp } from '@inertiaui/modal-react'
 import DefaultLayout from '../layouts/DefaultLayout'
 import type { ReactNode } from 'react'
 
@@ -22,7 +23,7 @@ createInertiaApp({
 
   setup({ el, App, props }) {
     if (el) {
-      createRoot(el).render(createElement(App, props))
+      createRoot(el).render(renderApp(App, props))
     }
   },
 

@@ -7,11 +7,11 @@ class ProjectsController < ApplicationController
     scope = scope.search(params[:query]) if params[:query].present?
     @pagy, @projects = pagy(scope.order(created_at: :desc))
 
-    render inertia: {
+    render inertia_modal: {
       projects: @projects.map { |p| serialize_project_card(p) },
       pagy: pagy_props(@pagy),
       query: params[:query].to_s
-    }
+    }, base_url: dashboard_path
   end
 
   def show
