@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { usePage } from '@inertiajs/react'
 import { ModalLink } from '@inertiaui/modal-react'
 import Shop from '@/components/Shop'
 import Projects from '@/components/Projects'
 import Path from '@/components/dashboard/Path'
+import PathNode from '@/components/dashboard/PathNode'
 import SignUpCta from '@/components/dashboard/SignUpCta'
 import Leaderboard from '@/components/dashboard/Leaderboard'
 import Header from '@/components/dashboard/Header'
@@ -37,6 +38,11 @@ export default function DashboardIndex() {
     { user: 'bingbong', hours: 2 },
   ])
   const [shopOpen, setShopOpen] = useState<boolean>(false)
+
+  const pathNodes = useMemo(
+    () => Array.from({ length: 60 }, (_, i) => <PathNode key={i} index={i} />),
+    [],
+  )
 
   useEffect(() => {
     const isMobile = window.innerWidth < 640
@@ -83,7 +89,7 @@ export default function DashboardIndex() {
         </button>
       </div>
 
-      <Path />
+      <Path nodes={pathNodes} />
     </>
   )
 }

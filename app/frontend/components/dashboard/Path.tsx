@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 const HORIZON_PCT = 0
 const PERSPECTIVE = 800
 const MAX_WIDTH = 1152 // 6xl
 const GROUND_ANGLE = 60 // degrees
 const LANES = 3
-const BILLBOARD_COUNT = 60
-const BILLBOARD_H = 300
+const BILLBOARD_CULL_H = 600 // estimated max height for culling buffer
 const BILLBOARD_Y_OFFSET = 60 // vertical offset for billboard content (px)
 const BILLBOARD_SPACING = 400 // px between rows on the ground plane
 const INFLECTION_PCT = 20 // % from top of screen where billboard bottoms peak
@@ -24,8 +23,6 @@ const GRASS_BASE_ROTATION = 0 // degrees (rotateZ lean)
 const GRASS_ROTATION_RANGE = 15 // rotation varies ± this from base
 const GRASS_IMAGES = Array.from({ length: 11 }, (_, i) => `/grass/${i + 1}.svg`)
 
-const BILLBOARD_IMAGES = ['/path/1.png', '/path/2.png', '/path/3.png']
-
 const LANE_PATTERN = [1, 2, 1, 0] // middle, right, middle, left
 
 const COS_A = Math.cos((GROUND_ANGLE * Math.PI) / 180)
@@ -41,14 +38,14 @@ function mulberry32(seed: number) {
   }
 }
 
-function generateGrass() {
+function generateGrass(minY: number, maxY: number) {
   const rng = mulberry32(42)
-  const maxY = BILLBOARD_COUNT * BILLBOARD_SPACING + 200
-  const count = Math.round((GRASS_DENSITY * maxY) / 1000)
+  const range = maxY - minY
+  const count = Math.round((GRASS_DENSITY * range) / 1000)
   return Array.from({ length: count }, (_, i) => ({
     id: i,
     x: GRASS_X_MIN + rng() * (GRASS_X_MAX - GRASS_X_MIN),
-    y: rng() * maxY,
+    y: minY + rng() * range,
     src: GRASS_IMAGES[Math.floor(rng() * GRASS_IMAGES.length)],
     scale: GRASS_BASE_SCALE + (rng() - 0.5) * 2 * GRASS_SCALE_RANGE,
     rotation: GRASS_BASE_ROTATION + (rng() - 0.5) * 2 * GRASS_ROTATION_RANGE,
@@ -56,12 +53,11 @@ function generateGrass() {
   })).sort((a, b) => b.y - a.y)
 }
 
-function generateBillboards() {
-  return Array.from({ length: BILLBOARD_COUNT }, (_, i) => ({
+function generateBillboards(count: number) {
+  return Array.from({ length: count }, (_, i) => ({
     id: i,
-    lane: LANE_PATTERN[i % LANE_PATTERN.length],
+    lane: LANE_PATTERN[(count - 1 - i) % LANE_PATTERN.length],
     y: i * BILLBOARD_SPACING + 200,
-    src: BILLBOARD_IMAGES[i % BILLBOARD_IMAGES.length],
   }))
 }
 
@@ -70,9 +66,12 @@ function generateBillboards() {
 const COT_ANGLE = Math.cos((GROUND_ANGLE * Math.PI) / 180) / Math.sin((GROUND_ANGLE * Math.PI) / 180)
 const PERSPECTIVE_OFFSET_PX = Math.round(PERSPECTIVE * COT_ANGLE)
 
-export default function Path() {
-  const [billboards] = useState(generateBillboards)
-  const [grass] = useState(generateGrass)
+type PathProps = {
+  nodes: ReactNode[]
+}
+
+export default function Path({ nodes }: PathProps) {
+  const billboards = useMemo(() => generateBillboards(nodes.length), [nodes.length])
 
   const [ready, setReady] = useState(false)
   const [windowSize, setWindowSize] = useState(() => ({
@@ -164,6 +163,12 @@ export default function Path() {
 
   const firstBillboardY = billboards[0].y
   const lastBillboardY = billboards[billboards.length - 1].y
+
+  const grass = useMemo(() => {
+    const grassMinY = firstBillboardY - middleGroundY
+    const grassMaxY = lastBillboardY - middleGroundY + inflectionGroundY
+    return generateGrass(grassMinY, grassMaxY)
+  }, [firstBillboardY, lastBillboardY, middleGroundY, inflectionGroundY])
   const maxScroll = (lastBillboardY - firstBillboardY) / SCROLL_SPEED
 
   useEffect(() => {
@@ -242,7 +247,7 @@ export default function Path() {
     const update = () => {
       const scrollOffset = scrollRef.current * SCROLL_SPEED + middleGroundY - lastBillboardY
 
-      const lowIdx = Math.max(0, Math.ceil((-BILLBOARD_H - scrollOffset - firstBillboardY) / BILLBOARD_SPACING))
+      const lowIdx = Math.max(0, Math.ceil((-BILLBOARD_CULL_H - scrollOffset - firstBillboardY) / BILLBOARD_SPACING))
 
       for (let i = prevLow; i < Math.min(lowIdx, billboards.length); i++) {
         const back = backBillboardRefs.current[i]
@@ -338,7 +343,6 @@ export default function Path() {
             background: 'var(--color-light-blue)',
           }}
         />
-
         {/* Clouds — behind all 3D content, constrained to sky band */}
         <div
           style={{
@@ -357,21 +361,11 @@ export default function Path() {
           <img src="/clouds/3.png" alt="" className="absolute bottom-0 right-0 h-30 md:h-50 w-auto translate-x-1/3" />
         </div>
 
-        {/* Ground */}
-        <div
-          style={{
-            position: 'absolute',
-            top: `${INFLECTION_PCT}%`,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: '#acc094',
-          }}
-        />
-
         {/* Back grass canvas */}
-        <canvas ref={backCanvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }} />
-
+        <canvas
+          ref={backCanvasRef}
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }}
+        />
         {/* Back billboard scene — past inflection (behind cover) */}
         <div
           style={{
@@ -393,7 +387,7 @@ export default function Path() {
               margin: '0 auto',
               transformOrigin: 'bottom center',
               transformStyle: 'preserve-3d',
-              transform: 'rotateX(60deg)',
+              transform: `rotateX(${GROUND_ANGLE}deg)`,
             }}
           >
             {billboards.map((b, i) => (
@@ -406,22 +400,17 @@ export default function Path() {
                   position: 'absolute',
                   left: `${(b.lane * 100) / LANES}%`,
                   width: `${100 / LANES}%`,
-                  height: BILLBOARD_H,
+                  height: 'auto',
                   transformOrigin: 'bottom center',
                 }}
               >
-                <div style={{ width: '100%', height: '100%', transform: `translateY(${BILLBOARD_Y_OFFSET}px)` }}>
-                  <img
-                    src={b.src}
-                    fetchPriority="high"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom center' }}
-                  />
+                <div style={{ width: '100%', transform: `translateY(${BILLBOARD_Y_OFFSET}px)` }}>
+                  {nodes[billboards.length - 1 - i]}
                 </div>
               </div>
             ))}
           </div>
         </div>
-
         {/* Hill cover */}
         <div
           style={{
@@ -434,10 +423,11 @@ export default function Path() {
             pointerEvents: 'none',
           }}
         />
-
         {/* Front grass canvas */}
-        <canvas ref={frontCanvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }} />
-
+        <canvas
+          ref={frontCanvasRef}
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }}
+        />
         {/* Front billboard scene — before inflection (in front of cover) */}
         <div
           style={{
@@ -460,7 +450,7 @@ export default function Path() {
               margin: '0 auto',
               transformOrigin: 'bottom center',
               transformStyle: 'preserve-3d',
-              transform: 'rotateX(60deg)',
+              transform: `rotateX(${GROUND_ANGLE}deg)`,
             }}
           >
             {billboards.map((b, i) => (
@@ -473,16 +463,17 @@ export default function Path() {
                   position: 'absolute',
                   left: `${(b.lane * 100) / LANES}%`,
                   width: `${100 / LANES}%`,
-                  height: BILLBOARD_H,
+                  height: 'auto',
                   transformOrigin: 'bottom center',
                 }}
               >
-                <div style={{ width: '100%', height: '100%', transform: `translateY(${BILLBOARD_Y_OFFSET}px)` }}>
-                  <img
-                    src={b.src}
-                    fetchPriority="high"
-                    style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'bottom center' }}
-                  />
+                <div
+                  style={{
+                    width: '100%',
+                    transform: `translateY(${BILLBOARD_Y_OFFSET}px)`,
+                  }}
+                >
+                  {nodes[billboards.length - 1 - i]}
                 </div>
               </div>
             ))}
