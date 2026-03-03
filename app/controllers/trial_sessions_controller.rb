@@ -1,5 +1,6 @@
 class TrialSessionsController < ApplicationController
   allow_unauthenticated_access only: %i[create]
+  skip_onboarding_redirect only: %i[create]
   rate_limit to: 1, within: 10.minutes, only: :create, with: -> { redirect_to root_path, alert: "Try again later." }
 
   def create

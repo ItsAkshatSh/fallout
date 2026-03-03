@@ -12,6 +12,7 @@
 #  is_adult            :boolean          default(FALSE), not null
 #  is_banned           :boolean          default(FALSE), not null
 #  lapse_token         :text
+#  onboarded           :boolean          default(FALSE), not null
 #  roles               :string           default([]), not null, is an Array
 #  timezone            :string           not null
 #  type                :string
@@ -40,6 +41,7 @@ class User < ApplicationRecord
   has_many :projects, dependent: :destroy
   has_many :ships, through: :projects
   has_many :reviewed_ships, class_name: "Ship", foreign_key: :reviewer_id, dependent: :nullify, inverse_of: :reviewer
+  has_many :onboarding_responses, dependent: :destroy
 
   encrypts :hca_token
   encrypts :lapse_token
@@ -238,6 +240,15 @@ class User < ApplicationRecord
 
   def koi
     0
+  end
+
+  def needs_onboarding?
+    !onboarded?
+  end
+
+  def reset_onboarding!
+    onboarding_responses.destroy_all
+    update!(onboarded: false)
   end
 
   private

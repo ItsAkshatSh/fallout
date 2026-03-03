@@ -9,6 +9,7 @@ module Authentication
       before_action :redirect_banned_user!
       before_action :redirect_discarded_trial_user!
       before_action :authenticate_verified_user!
+      before_action :redirect_to_onboarding!
       helper_method :current_user, :user_signed_in?
   end
 
@@ -19,6 +20,10 @@ module Authentication
 
     def allow_trial_access(only: nil)
       skip_before_action :authenticate_verified_user!, only: only
+    end
+
+    def skip_onboarding_redirect(only: nil)
+      skip_before_action :redirect_to_onboarding!, only: only
     end
   end
 
@@ -48,6 +53,10 @@ module Authentication
 
   def redirect_banned_user!
     redirect_to sorry_path if current_user&.is_banned?
+  end
+
+  def redirect_to_onboarding!
+    redirect_to onboarding_path if current_user&.needs_onboarding?
   end
 
   def redirect_discarded_trial_user!

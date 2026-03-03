@@ -1,0 +1,25 @@
+steps:
+  - key: welcome
+    type: dialogue
+    prompt: "Welcome to Fallout!"
+    subtitle: "Let's get you set up. This will only take a minute."
+
+  - key: referral_source
+    type: multi_choice
+    prompt: "How did you hear about us?"
+    allow_other: true
+    options:
+      - "Friend or classmate"
+      - "Hack Club Slack"
+      - "Social media"
+      - "Search engine"
+
+  - key: experience_level
+    type: single_choice
+    prompt: "How much coding experience do you have?"
+    allow_other: false
+    options:
+      - "Just getting started"
+      - "Less than a year"
+      - "1-3 years"
+      - "3+ years"

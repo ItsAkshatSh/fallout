@@ -125,6 +125,9 @@ Rails.application.routes.draw do
 
   get "sorry" => "bans#show", as: :sorry
 
+  get "onboarding" => "onboarding#show", as: :onboarding
+  post "onboarding" => "onboarding#update"
+
   get "dashboard" => "dashboard#index", as: :dashboard
 
   resources :projects
