@@ -8,7 +8,9 @@ const LANES = 3
 const BILLBOARD_CULL_H = 600 // estimated max height for culling buffer
 const BILLBOARD_Y_OFFSET = 60 // vertical offset for billboard content (px)
 const BILLBOARD_SPACING = 400 // px between rows on the ground plane
-const INFLECTION_PCT = 20 // % from top of screen where billboard bottoms peak
+const INFLECTION_PCT = 20 // % from top of screen where sky ends and ground begins
+const TOP_PCT = 40 // % from top of ground area where billboard bottoms peak
+const BOTTOM_PCT = 30 // % from bottom of ground area where closest billboard appears
 const SCROLL_SPEED = 1.5
 
 const GRASS_DENSITY = 7 // blades per 1000px of ground depth
@@ -103,7 +105,7 @@ export default function Path({ nodes }: PathProps) {
     }
   }, [])
 
-  const { planetRadius, inflectionScreenY, inflectionGroundY, middleGroundY } = useMemo(() => {
+  const { planetRadius, inflectionScreenY, inflectionGroundY, topGroundY, bottomGroundY } = useMemo(() => {
     const H = windowSize.h
     const O = PERSPECTIVE_OFFSET_PX
     const P = PERSPECTIVE
@@ -144,20 +146,29 @@ export default function Path({ nodes }: PathProps) {
     const peakD = findPeakD(radius)
     const screenY = screenYAt(peakD, radius)
 
-    const middleScreenY = (screenY + H) / 2
-    let mLo = 0,
-      mHi = peakD
-    for (let i = 0; i < 60; i++) {
-      const mid = (mLo + mHi) / 2
-      if (screenYAt(mid, radius) > middleScreenY) mLo = mid
-      else mHi = mid
+    // Scroll limits relative to ground area (inflection to viewport bottom)
+    const groundHeight = H - screenY
+    const topScreenY = screenY + (TOP_PCT / 100) * groundHeight
+    const bottomScreenY = H - (BOTTOM_PCT / 100) * groundHeight
+
+    // Bisect for ground distance projecting to each scroll limit
+    const findGroundD = (target: number) => {
+      let lo = 0,
+        hi = peakD
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2
+        if (screenYAt(mid, radius) > target) lo = mid
+        else hi = mid
+      }
+      return (lo + hi) / 2
     }
 
     return {
       planetRadius: radius,
       inflectionScreenY: screenY,
       inflectionGroundY: peakD,
-      middleGroundY: (mLo + mHi) / 2,
+      topGroundY: findGroundD(topScreenY),
+      bottomGroundY: findGroundD(bottomScreenY),
     }
   }, [windowSize.h])
 
@@ -165,11 +176,11 @@ export default function Path({ nodes }: PathProps) {
   const lastBillboardY = billboards[billboards.length - 1].y
 
   const grass = useMemo(() => {
-    const grassMinY = firstBillboardY - middleGroundY
-    const grassMaxY = lastBillboardY - middleGroundY + inflectionGroundY
+    const grassMinY = firstBillboardY - bottomGroundY
+    const grassMaxY = lastBillboardY - topGroundY + inflectionGroundY
     return generateGrass(grassMinY, grassMaxY)
-  }, [firstBillboardY, lastBillboardY, middleGroundY, inflectionGroundY])
-  const maxScroll = (lastBillboardY - firstBillboardY) / SCROLL_SPEED
+  }, [firstBillboardY, lastBillboardY, topGroundY, bottomGroundY, inflectionGroundY])
+  const maxScroll = (lastBillboardY - firstBillboardY + bottomGroundY - topGroundY) / SCROLL_SPEED
 
   useEffect(() => {
     const W = windowSize.w
@@ -245,7 +256,7 @@ export default function Path({ nodes }: PathProps) {
     let prevHigh = billboards.length - 1
 
     const update = () => {
-      const scrollOffset = scrollRef.current * SCROLL_SPEED + middleGroundY - lastBillboardY
+      const scrollOffset = scrollRef.current * SCROLL_SPEED + topGroundY - lastBillboardY
 
       const lowIdx = Math.max(0, Math.ceil((-BILLBOARD_CULL_H - scrollOffset - firstBillboardY) / BILLBOARD_SPACING))
 
@@ -326,7 +337,7 @@ export default function Path({ nodes }: PathProps) {
       window.removeEventListener('scroll', handleScroll)
       cancelAnimationFrame(rafRef.current)
     }
-  }, [billboards, grass, planetRadius, inflectionGroundY, middleGroundY, lastBillboardY, windowSize.w])
+  }, [billboards, grass, planetRadius, inflectionGroundY, topGroundY, lastBillboardY, windowSize.w])
 
   return (
     <>
