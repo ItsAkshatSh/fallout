@@ -30,7 +30,6 @@
   @apply font-outfit bg-light-blue text-dark-brown overscroll-none;
 }
 
-
 .im-modal-positioner {
   @apply h-full!;
 }

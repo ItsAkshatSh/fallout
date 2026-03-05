@@ -130,7 +130,9 @@ Rails.application.routes.draw do
 
   get "dashboard" => "dashboard#index", as: :dashboard
 
-  resources :projects
+  resources :projects do
+    get "onboarding", on: :collection # Project onboarding modal accessed from dashboard path
+  end
 
   get "docs" => "markdown#show", as: :docs
   get "docs/*slug" => "markdown#show", as: :doc

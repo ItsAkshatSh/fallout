@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 const HORIZON_PCT = 0
 const PERSPECTIVE = 800
@@ -9,9 +9,10 @@ const BILLBOARD_CULL_H = 600 // estimated max height for culling buffer
 const BILLBOARD_Y_OFFSET = 60 // vertical offset for billboard content (px)
 const BILLBOARD_SPACING = 400 // px between rows on the ground plane
 const INFLECTION_PCT = 20 // % from top of screen where sky ends and ground begins
-const TOP_PCT = 40 // % from top of ground area where billboard bottoms peak
+const TOP_PCT = 60 // % from top of ground area where billboard bottoms peak
 const BOTTOM_PCT = 30 // % from bottom of ground area where closest billboard appears
 const SCROLL_SPEED = 1.5
+const SCROLL_TO_BOTTOM_PCT = 25 // clicked node's bottom lands this % from screen bottom
 
 const GRASS_DENSITY = 7 // blades per 1000px of ground depth
 const GRASS_X_MIN = -150 // % of ground plane width
@@ -24,6 +25,24 @@ const GRASS_SCALE_RANGE = 0.1 // scale varies ± this from base
 const GRASS_BASE_ROTATION = 0 // degrees (rotateZ lean)
 const GRASS_ROTATION_RANGE = 15 // rotation varies ± this from base
 const GRASS_IMAGES = Array.from({ length: 11 }, (_, i) => `/grass/${i + 1}.svg`)
+
+function screenYAt(d: number, R: number, H: number) {
+  const cZ = (d * d) / (2 * R)
+  const yw = H - d * COS_A + cZ * SIN_A
+  const zw = -d * SIN_A - cZ * COS_A
+  return PERSPECTIVE_OFFSET_PX + ((yw - PERSPECTIVE_OFFSET_PX) * PERSPECTIVE) / (PERSPECTIVE - zw)
+}
+
+function findGroundD(targetScreenY: number, R: number, H: number, peakD: number) {
+  let lo = 0,
+    hi = peakD
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2
+    if (screenYAt(mid, R, H) > targetScreenY) lo = mid
+    else hi = mid
+  }
+  return (lo + hi) / 2
+}
 
 const LANE_PATTERN = [1, 2, 1, 0] // middle, right, middle, left
 
@@ -107,18 +126,7 @@ export default function Path({ nodes }: PathProps) {
 
   const { planetRadius, inflectionScreenY, inflectionGroundY, topGroundY, bottomGroundY } = useMemo(() => {
     const H = windowSize.h
-    const O = PERSPECTIVE_OFFSET_PX
-    const P = PERSPECTIVE
-    const cosA = Math.cos((GROUND_ANGLE * Math.PI) / 180)
-    const sinA = Math.sin((GROUND_ANGLE * Math.PI) / 180)
-    const targetScreenY = (INFLECTION_PCT / 100) * H
-
-    const screenYAt = (d: number, R: number) => {
-      const cZ = (d * d) / (2 * R)
-      const yw = H - d * cosA + cZ * sinA
-      const zw = -d * sinA - cZ * cosA
-      return O + ((yw - O) * P) / (P - zw)
-    }
+    const targetSY = (INFLECTION_PCT / 100) * H
 
     const findPeakD = (R: number) => {
       let dLo = 0,
@@ -126,7 +134,7 @@ export default function Path({ nodes }: PathProps) {
       for (let i = 0; i < 60; i++) {
         const mid = (dLo + dHi) / 2
         const eps = 0.5
-        const deriv = (screenYAt(mid + eps, R) - screenYAt(mid - eps, R)) / (2 * eps)
+        const deriv = (screenYAt(mid + eps, R, H) - screenYAt(mid - eps, R, H)) / (2 * eps)
         if (deriv < 0) dLo = mid
         else dHi = mid
       }
@@ -138,37 +146,24 @@ export default function Path({ nodes }: PathProps) {
     for (let i = 0; i < 60; i++) {
       const rMid = (rLo + rHi) / 2
       const peakD = findPeakD(rMid)
-      const peakScreenY = screenYAt(peakD, rMid)
-      if (peakScreenY < targetScreenY) rHi = rMid
+      const peakScreenY = screenYAt(peakD, rMid, H)
+      if (peakScreenY < targetSY) rHi = rMid
       else rLo = rMid
     }
     const radius = (rLo + rHi) / 2
     const peakD = findPeakD(radius)
-    const screenY = screenYAt(peakD, radius)
+    const screenY = screenYAt(peakD, radius, H)
 
-    // Scroll limits relative to ground area (inflection to viewport bottom)
     const groundHeight = H - screenY
     const topScreenY = screenY + (TOP_PCT / 100) * groundHeight
     const bottomScreenY = H - (BOTTOM_PCT / 100) * groundHeight
-
-    // Bisect for ground distance projecting to each scroll limit
-    const findGroundD = (target: number) => {
-      let lo = 0,
-        hi = peakD
-      for (let i = 0; i < 60; i++) {
-        const mid = (lo + hi) / 2
-        if (screenYAt(mid, radius) > target) lo = mid
-        else hi = mid
-      }
-      return (lo + hi) / 2
-    }
 
     return {
       planetRadius: radius,
       inflectionScreenY: screenY,
       inflectionGroundY: peakD,
-      topGroundY: findGroundD(topScreenY),
-      bottomGroundY: findGroundD(bottomScreenY),
+      topGroundY: findGroundD(topScreenY, radius, H, peakD),
+      bottomGroundY: findGroundD(bottomScreenY, radius, H, peakD),
     }
   }, [windowSize.h])
 
@@ -181,6 +176,21 @@ export default function Path({ nodes }: PathProps) {
     return generateGrass(grassMinY, grassMaxY)
   }, [firstBillboardY, lastBillboardY, topGroundY, bottomGroundY, inflectionGroundY])
   const maxScroll = (lastBillboardY - firstBillboardY + bottomGroundY - topGroundY) / SCROLL_SPEED
+
+  const scrollToNode = useCallback(
+    (nodeIndex: number) => {
+      const H = windowSize.h
+      const billboardIndex = billboards.length - 1 - nodeIndex
+      if (billboardIndex < 0 || billboardIndex >= billboards.length) return
+      const b = billboards[billboardIndex]
+      const targetScreenY = H * (1 - SCROLL_TO_BOTTOM_PCT / 100)
+      const targetGroundD = findGroundD(targetScreenY, planetRadius, H, inflectionGroundY)
+      // rawY = b.y + scrollY * SCROLL_SPEED + topGroundY - lastBillboardY = targetGroundD
+      const scrollY = (targetGroundD - b.y - topGroundY + lastBillboardY) / SCROLL_SPEED
+      window.scrollTo({ top: Math.max(0, Math.min(maxScroll, scrollY)), behavior: 'smooth' })
+    },
+    [billboards, windowSize.h, planetRadius, inflectionGroundY, topGroundY, lastBillboardY, maxScroll],
+  )
 
   useEffect(() => {
     const W = windowSize.w
@@ -384,6 +394,7 @@ export default function Path({ nodes }: PathProps) {
             inset: 0,
             perspective: `${PERSPECTIVE}px`,
             perspectiveOrigin: `50% calc(${HORIZON_PCT}% + ${PERSPECTIVE_OFFSET_PX}px)`,
+            pointerEvents: 'none',
             visibility: ready ? 'visible' : 'hidden',
           }}
         >
@@ -415,8 +426,16 @@ export default function Path({ nodes }: PathProps) {
                   transformOrigin: 'bottom center',
                 }}
               >
-                <div style={{ width: '100%', transform: `translateY(${BILLBOARD_Y_OFFSET}px)` }}>
-                  {nodes[billboards.length - 1 - i]}
+                <div
+                  style={{ width: '100%', transform: `translateY(${BILLBOARD_Y_OFFSET}px)`, cursor: 'pointer' }}
+                  onClick={() => scrollToNode(billboards.length - 1 - i)}
+                >
+                  {(() => {
+                    const node = nodes[billboards.length - 1 - i]
+                    return React.isValidElement(node)
+                      ? React.cloneElement(node as React.ReactElement<{ interactive?: boolean }>, { interactive: false })
+                      : node
+                  })()}
                 </div>
               </div>
             ))}
@@ -482,7 +501,9 @@ export default function Path({ nodes }: PathProps) {
                   style={{
                     width: '100%',
                     transform: `translateY(${BILLBOARD_Y_OFFSET}px)`,
+                    cursor: 'pointer',
                   }}
+                  onClick={() => scrollToNode(billboards.length - 1 - i)}
                 >
                   {nodes[billboards.length - 1 - i]}
                 </div>

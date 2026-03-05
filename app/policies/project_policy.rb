@@ -5,6 +5,10 @@ class ProjectPolicy < ApplicationPolicy
     true
   end
 
+  def onboarding?
+    true # Any authenticated user can view the project onboarding modal
+  end
+
   def show?
     return false if record.discarded? && !admin?
     admin? || !record.is_unlisted || owner?

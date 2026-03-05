@@ -1,6 +1,14 @@
 class ProjectsController < ApplicationController
-  allow_trial_access only: %i[index show new create edit update destroy] # Trial users can manage their single project
+  allow_trial_access only: %i[index show new create edit update destroy onboarding] # Trial users can manage their single project
   before_action :set_project, only: %i[show edit update destroy]
+
+  def onboarding
+    authorize :project, :onboarding? # Policy gate for project onboarding access
+
+    render inertia: "projects/onboarding/index", props: {
+      is_modal: request.headers["X-InertiaUI-Modal"].present?
+    }
+  end
 
   def index
     scope = policy_scope(Project).includes(:user, :ships)
