@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useState, useRef } from 'react'
 import { router } from '@inertiajs/react'
 import { Modal } from '@inertiaui/modal-react'
 import Frame from '@/components/shared/Frame'
@@ -12,12 +12,18 @@ function ProjectsOnboarding({ is_modal }: { is_modal: boolean }) {
   const [description, setDescription] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [processing, setProcessing] = useState(false)
+  const modalRef = useRef<{ close: () => void }>(null)
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (processing) return
     setProcessing(true)
-    router.post('/projects', { name, description }, { onFinish: () => setProcessing(false) })
+    const data: Record<string, string> = { name, description }
+    if (is_modal) data.return_to = 'dashboard'
+    router.post('/projects', data, {
+      onFinish: () => setProcessing(false),
+      onSuccess: () => modalRef.current?.close()
+    })
   }
 
   const content = (
@@ -139,7 +145,7 @@ function ProjectsOnboarding({ is_modal }: { is_modal: boolean }) {
 
   if (is_modal) {
     return (
-      <Modal panelClasses="h-full" paddingClasses="max-w-5xl mx-auto" closeButton={false} maxWidth="7xl">
+      <Modal ref={modalRef} panelClasses="h-full" paddingClasses="max-w-5xl mx-auto" closeButton={false} maxWidth="7xl">
         <Frame className="h-full">{content}</Frame>
       </Modal>
     )

@@ -10,7 +10,8 @@ class DashboardController < ApplicationController
         email: current_user.email,
         koi: current_user.koi,
         avatar: current_user.avatar
-      }
+      },
+      has_projects: current_user.projects.kept.exists?
     }
   end
 end

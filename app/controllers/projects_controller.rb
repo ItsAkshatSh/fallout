@@ -53,7 +53,9 @@ class ProjectsController < ApplicationController
     authorize @project
 
     if @project.save
-      redirect_to @project, notice: "Project created."
+      # Redirect to dashboard when created from the onboarding modal so it closes and tooltips update
+      destination = params[:return_to] == "dashboard" ? dashboard_path : @project
+      redirect_to destination, notice: "Project created."
     else
       redirect_back fallback_location: new_project_path, inertia: { errors: @project.errors.messages }
     end

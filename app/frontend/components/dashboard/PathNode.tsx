@@ -1,11 +1,22 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ModalLink } from '@inertiaui/modal-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/shared/Tooltip'
 
 const BILLBOARD_IMAGES = ['/path/1.png', '/path/2.png', '/path/3.png']
 
-export default function PathNode({ index, interactive = true }: { index: number; interactive?: boolean }) {
-  const [showTooltip, setShowTooltip] = useState(index === 0)
+export default function PathNode({ index, interactive = true, hasProjects = false }: { index: number; interactive?: boolean; hasProjects?: boolean }) {
+  const showStarTooltip = index === 0 && !hasProjects
+  const showDoneTooltip = index === 0 && hasProjects
+  const showNode1Tooltip = index === 1 && hasProjects
+  const [modalOpen, setModalOpen] = useState(false)
+  const [node1Ready, setNode1Ready] = useState(false)
+
+  // Delay showing node 1 tooltip so it appears after modal fade-out
+  useEffect(() => {
+    if (!showNode1Tooltip) return
+    const timer = setTimeout(() => setNode1Ready(true), 500)
+    return () => clearTimeout(timer)
+  }, [showNode1Tooltip])
 
   const starImage = (
     <img
@@ -17,17 +28,17 @@ export default function PathNode({ index, interactive = true }: { index: number;
 
   const content = (
     <div style={{ pointerEvents: 'auto' }} className="cursor-pointer">
-      {index === 0 && interactive && (
+      {index === 0 && interactive && !hasProjects && (
         <ModalLink
           href="/projects/onboarding"
           className="outline-0"
-          onStart={() => setShowTooltip(false)}
-          onAfterLeave={() => setShowTooltip(true)}
+          onStart={() => setModalOpen(true)}
+          onAfterLeave={() => setModalOpen(false)}
         >
           {starImage}
         </ModalLink>
       )}
-      {index === 0 && !interactive && starImage}
+      {index === 0 && (!interactive || hasProjects) && starImage}
       {index === 3 && <img src="/path/slack.png" fetchPriority="high" style={{ width: '100%', display: 'block' }} />}
 
       {index !== 0 && index !== 3 && (
@@ -42,10 +53,32 @@ export default function PathNode({ index, interactive = true }: { index: number;
 
   if (!interactive) return content
 
-  return (
-    <Tooltip side="top" gap={12} trackScroll alwaysShow={showTooltip}>
-      <TooltipTrigger>{content}</TooltipTrigger>
-      <TooltipContent>{index === 0 ? 'Start here!' : `Node ${index}`}</TooltipContent>
-    </Tooltip>
-  )
+  if (showStarTooltip) {
+    return (
+      <Tooltip side="top" gap={12} trackScroll alwaysShow={!modalOpen}>
+        <TooltipTrigger>{content}</TooltipTrigger>
+        <TooltipContent>Start here!</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  if (showDoneTooltip) {
+    return (
+      <Tooltip side="top" gap={12} trackScroll>
+        <TooltipTrigger>{content}</TooltipTrigger>
+        <TooltipContent>Already done!</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  if (showNode1Tooltip) {
+    return (
+      <Tooltip side="top" gap={12} trackScroll alwaysShow={node1Ready}>
+        <TooltipTrigger>{content}</TooltipTrigger>
+        <TooltipContent>Click here!</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return content
 }

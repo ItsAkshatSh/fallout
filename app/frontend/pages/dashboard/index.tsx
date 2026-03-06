@@ -21,11 +21,13 @@ type PageProps = {
     koi: number
     avatar: string
   }
+  has_projects: boolean
 }
 
 export default function DashboardIndex() {
   const {
     user,
+    has_projects,
     auth: { user: authUser },
     sign_in_path,
   } = usePage<PageProps & SharedProps>().props
@@ -33,7 +35,7 @@ export default function DashboardIndex() {
   const [notPressed] = useState<boolean>(true)
   const [loggedIn] = useState(false)
 
-  const pathNodes = useMemo(() => Array.from({ length: 60 }, (_, i) => <PathNode key={i} index={i} />), [])
+  const pathNodes = useMemo(() => Array.from({ length: 60 }, (_, i) => <PathNode key={i} index={i} hasProjects={has_projects} />), [has_projects])
 
   useEffect(() => {
     const isMobile = window.innerWidth < 640
