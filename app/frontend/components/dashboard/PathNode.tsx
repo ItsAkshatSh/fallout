@@ -5,7 +5,15 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/shared/Too
 
 const BILLBOARD_IMAGES = ['/path/1.png', '/path/2.png', '/path/3.png']
 
-export default function PathNode({ index, interactive = true, hasProjects = false }: { index: number; interactive?: boolean; hasProjects?: boolean }) {
+export default function PathNode({
+  index,
+  interactive = true,
+  hasProjects = false,
+}: {
+  index: number
+  interactive?: boolean
+  hasProjects?: boolean
+}) {
   const showStarTooltip = index === 0 && !hasProjects
   const showDoneTooltip = index === 0 && hasProjects
   const showNode1Tooltip = index === 1 && hasProjects
@@ -31,10 +39,7 @@ export default function PathNode({ index, interactive = true, hasProjects = fals
   const content = (
     <div style={{ pointerEvents: 'auto' }} className="cursor-pointer">
       {index === 0 && interactive && !hasProjects && (
-        <ModalLink
-          href="/projects/onboarding"
-          className="outline-0"
-        >
+        <ModalLink href="/projects/onboarding" className="outline-0">
           {starImage}
         </ModalLink>
       )}
@@ -42,10 +47,7 @@ export default function PathNode({ index, interactive = true, hasProjects = fals
       {index === 3 && <img src="/path/slack.png" fetchPriority="high" style={{ width: '100%', display: 'block' }} />}
 
       {index === 1 && interactive && hasProjects && (
-        <ModalLink
-          href="/journals/new"
-          className="outline-0"
-        >
+        <ModalLink href="/journals/new" className="outline-0">
           <img
             src={BILLBOARD_IMAGES[index % BILLBOARD_IMAGES.length]}
             fetchPriority="high"

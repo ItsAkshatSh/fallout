@@ -61,7 +61,7 @@ export default function DashboardIndex() {
       const newUrl = params.toString() ? `${window.location.pathname}?${params}` : window.location.pathname
       window.history.replaceState({}, '', newUrl)
       const modalUrl = projectId ? `/projects/${projectId}/journals/new` : '/journals/new'
-      visitModal(modalUrl)
+      visitModal(modalUrl, { config: { duration: 0 } })
     }
   }, [])
 
