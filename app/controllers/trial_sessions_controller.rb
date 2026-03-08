@@ -24,7 +24,15 @@ class TrialSessionsController < ApplicationController
     end
 
     device_token = cookies.encrypted[:trial_device_token] || SecureRandom.hex(32)
-    trial_user = TrialUser.find_or_create_from_device(email: email, device_token: device_token)
+
+    begin
+      trial_user = TrialUser.find_or_create_from_device(email: email, device_token: device_token)
+    rescue ActiveRecord::RecordInvalid
+      # A verified user was created between the exists? check and create! (TOCTOU race)
+      response.headers["X-Inertia-Location"] = signin_path(login_hint: email)
+      head :conflict
+      return
+    end
 
     cookies.encrypted[:trial_device_token] = {
       value: device_token,

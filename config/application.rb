@@ -22,6 +22,9 @@ module Fallout
     # Serve Active Storage under /user-attachments instead of /rails/active_storage
     config.active_storage.routes_prefix = "/user-attachments"
 
+    # Allow reading existing plaintext values while transitioning to encrypted device_token
+    config.active_record.encryption.support_unencrypted_data = true
+
     # Configuration for the application, engines, and railties goes here.
     #
     # These settings can be overridden in specific environments using the files

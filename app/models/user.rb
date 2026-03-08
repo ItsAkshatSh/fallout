@@ -4,7 +4,7 @@
 #
 #  id                  :bigint           not null, primary key
 #  avatar              :string           not null
-#  device_token        :string
+#  device_token        :text
 #  discarded_at        :datetime
 #  display_name        :string           not null
 #  email               :string           not null
@@ -26,6 +26,7 @@
 #
 #  index_users_on_device_token        (device_token)
 #  index_users_on_discarded_at        (discarded_at)
+#  index_users_on_hca_id              (hca_id) UNIQUE WHERE (hca_id IS NOT NULL)
 #  index_users_unique_verified_email  (email) UNIQUE WHERE ((type IS NULL) AND (discarded_at IS NULL))
 #
 class User < ApplicationRecord
@@ -50,13 +51,17 @@ class User < ApplicationRecord
 
   encrypts :hca_token
   encrypts :lapse_token
+  encrypts :device_token, deterministic: true # Deterministic so find_by lookups work
 
   scope :verified, -> { where(type: nil) } # STI: verified users have type=nil; TrialUser subclass has type='TrialUser'
 
   validates :avatar, :display_name, :email, :timezone, presence: true
   validates :slack_id, presence: true, unless: :trial?
   validates :hca_id, presence: true, unless: :trial?
+  VALID_ROLES = %w[user admin reviewer].freeze
+
   validates :roles, presence: true, unless: :trial?
+  validate :roles_must_be_valid, unless: :trial?
   validates :is_banned, inclusion: { in: [ true, false ] }
 
   def has_role?(role)
@@ -64,6 +69,8 @@ class User < ApplicationRecord
   end
 
   def add_role(role)
+    raise ArgumentError, "Invalid role: #{role}" unless role.to_s.in?(VALID_ROLES)
+
     roles << role.to_s unless has_role?(role)
     save
   end
@@ -269,6 +276,13 @@ class User < ApplicationRecord
   end
 
   private
+
+  def roles_must_be_valid
+    return if roles.blank?
+
+    invalid = roles - VALID_ROLES
+    errors.add(:roles, "contain invalid values: #{invalid.join(', ')}") if invalid.any?
+  end
 
   def self.determine_is_adult(identity)
     birthday_str = identity["birthday"]

@@ -37,6 +37,7 @@ class LapseTimelapse < ApplicationRecord
   belongs_to :journal_entry, optional: true
 
   validates :lapse_timelapse_id, presence: true, uniqueness: true
+  validate :user_must_match_journal_user
 
   def fetch_data
     token = user.lapse_token
@@ -63,5 +64,11 @@ class LapseTimelapse < ApplicationRecord
       owner_handle: data.dig("owner", "handle"),
       last_refreshed_at: Time.current
     )
+  end
+
+  private
+
+  def user_must_match_journal_user
+    errors.add(:journal_entry, "must belong to the same user") if journal_entry && journal_entry.user_id != user_id
   end
 end

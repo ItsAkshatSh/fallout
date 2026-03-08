@@ -4,7 +4,7 @@
 #
 #  id                  :bigint           not null, primary key
 #  avatar              :string           not null
-#  device_token        :string
+#  device_token        :text
 #  discarded_at        :datetime
 #  display_name        :string           not null
 #  email               :string           not null
@@ -26,6 +26,7 @@
 #
 #  index_users_on_device_token        (device_token)
 #  index_users_on_discarded_at        (discarded_at)
+#  index_users_on_hca_id              (hca_id) UNIQUE WHERE (hca_id IS NOT NULL)
 #  index_users_unique_verified_email  (email) UNIQUE WHERE ((type IS NULL) AND (discarded_at IS NULL))
 #
 require "test_helper"

@@ -58,37 +58,46 @@ class MailMessage < ApplicationRecord
 
     filtered = arel_table[:user_id].eq(nil).and(
       Arel::Nodes::SqlLiteral.new("mail_messages.filters != '{}'::jsonb")
-    ).and(build_filter_conditions(user))
+    ).and(Arel::Nodes::SqlLiteral.new(build_filter_conditions(user)))
 
     direct.or(broadcast).or(filtered)
   end
 
   def self.build_filter_conditions(user)
     conditions = []
+    binds = []
 
     # Role filter: user has any of the specified roles
     if user.roles.present?
-      quoted_roles = user.roles.map { |r| ActiveRecord::Base.connection.quote(r) }.join(",")
-      conditions << "(mail_messages.filters->'roles' IS NULL OR mail_messages.filters->'roles' ?| ARRAY[#{quoted_roles}])"
+      conditions << "(mail_messages.filters->'roles' IS NULL OR mail_messages.filters->'roles' ?| ARRAY[#{user.roles.map { '?' }.join(',')}])"
+      binds.concat(user.roles)
     else
       conditions << "mail_messages.filters->'roles' IS NULL"
     end
 
     # Join date filters
     user_date = user.created_at.to_date.iso8601
-    conditions << "(mail_messages.filters->>'joined_before' IS NULL OR #{connection.quote(user_date)} < (mail_messages.filters->>'joined_before')::date)"
-    conditions << "(mail_messages.filters->>'joined_after' IS NULL OR #{connection.quote(user_date)} >= (mail_messages.filters->>'joined_after')::date)"
+    conditions << "(mail_messages.filters->>'joined_before' IS NULL OR ? < (mail_messages.filters->>'joined_before')::date)"
+    binds << user_date
+    conditions << "(mail_messages.filters->>'joined_after' IS NULL OR ? >= (mail_messages.filters->>'joined_after')::date)"
+    binds << user_date
 
-    # Activity filters — pre-evaluated in Ruby
+    # Activity filters — pre-evaluated in Ruby, safe boolean/string values only
     has_projects = user.projects.kept.exists?
-    conditions << "(mail_messages.filters->>'has_projects' IS NULL OR #{has_projects})"
+    conditions << "(mail_messages.filters->>'has_projects' IS NULL OR #{has_projects})" # Safe: Ruby boolean literal, not user input
 
     ship_statuses = user.ships.distinct.pluck(:status)
-    conditions << "(mail_messages.filters->>'has_ships_with_status' IS NULL OR mail_messages.filters->>'has_ships_with_status' IN (#{ship_statuses.map { |s| connection.quote(s) }.join(",").presence || "''"}))"
+    if ship_statuses.any?
+      conditions << "(mail_messages.filters->>'has_ships_with_status' IS NULL OR mail_messages.filters->>'has_ships_with_status' IN (#{ship_statuses.map { '?' }.join(',')}))"
+      binds.concat(ship_statuses)
+    else
+      conditions << "(mail_messages.filters->>'has_ships_with_status' IS NULL OR FALSE)"
+    end
 
     # Explicit user ID list
-    conditions << "(mail_messages.filters->'user_ids' IS NULL OR mail_messages.filters->'user_ids' @> #{connection.quote(user.id.to_s)}::jsonb)"
+    conditions << "(mail_messages.filters->'user_ids' IS NULL OR mail_messages.filters->'user_ids' @> ?::jsonb)"
+    binds << user.id.to_s
 
-    Arel::Nodes::SqlLiteral.new(conditions.join(" AND "))
+    sanitize_sql_array([ conditions.join(" AND "), *binds ])
   end
 end

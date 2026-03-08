@@ -9,7 +9,7 @@ module ApplicationCable
     private
 
     def find_verified_user
-      if user_id = cookies.signed[:user_id]
+      if user_id = request.session[:user_id]
         User.find_by(id: user_id)
       end
     end
