@@ -313,8 +313,19 @@ function TimelapseBrowser({
 }) {
   if (timelapses.length === 0) {
     return (
-      <div className="mt-6 p-4 border-2 border-dark-brown/30 rounded text-dark-brown/50">
-        No timelapses found. Start coding to generate timelapses!
+      <div className="mt-6 space-y-4">
+        <h2 className="font-bold text-xl">Select timelapses for your journal</h2>
+        <div className="p-6 flex flex-col items-center gap-3">
+          <p className="text-dark-brown">No timelapses found</p>
+          <a
+            href="https://lapse.hackclub.com/timelapse/create"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="py-1.5 px-4 border-2 font-bold uppercase bg-brown text-light-brown border-dark-brown cursor-pointer text-sm"
+          >
+            Start a timelapse
+          </a>
+        </div>
       </div>
     )
   }
