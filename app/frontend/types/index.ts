@@ -19,6 +19,7 @@ export interface SharedProps {
   sign_in_path: string
   sign_out_path: string
   trial_session_path: string
+  rsvp_path: string
   has_unread_mail: boolean
   errors: Record<string, string[]>
   [key: string]: unknown
