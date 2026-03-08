@@ -69,7 +69,7 @@ class MailMessage < ApplicationRecord
 
     # Role filter: user has any of the specified roles
     if user.roles.present?
-      conditions << "(mail_messages.filters->'roles' IS NULL OR mail_messages.filters->'roles' ?| ARRAY[#{user.roles.map { '?' }.join(',')}])"
+      conditions << "(mail_messages.filters->'roles' IS NULL OR jsonb_exists_any(mail_messages.filters->'roles', ARRAY[#{user.roles.map { '?' }.join(',')}]))"
       binds.concat(user.roles)
     else
       conditions << "mail_messages.filters->'roles' IS NULL"

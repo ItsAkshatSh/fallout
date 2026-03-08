@@ -5,4 +5,4 @@
 
 # Welcome to Fallout Docs
 
-Everything you need to know about building your hardware project, tracking your progress, and shipping your work.
+Everything you need to know about building your hardware project, tracking your progress, shipping your work, and the event itself!

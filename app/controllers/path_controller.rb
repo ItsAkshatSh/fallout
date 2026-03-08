@@ -11,7 +11,8 @@ class PathController < ApplicationController
         koi: current_user.koi,
         avatar: current_user.avatar
       },
-      has_projects: current_user.projects.kept.exists?
+      has_projects: current_user.projects.kept.exists?,
+      journal_entry_count: current_user.journal_entries.kept.count
     }
   end
 end
