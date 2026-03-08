@@ -466,7 +466,6 @@ export default function MarkdownEditor({
 }: MarkdownEditorProps) {
   const [tab, setTab] = useState<'write' | 'preview'>('write')
   const [blobSignedIds, setBlobSignedIds] = useState<string[]>([])
-  const [imageCount, setImageCount] = useState(0)
   const [previewHtml, setPreviewHtml] = useState('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -516,7 +515,6 @@ export default function MarkdownEditor({
         onBlobsChange(next)
         return next
       })
-      setImageCount((prev) => prev + 1)
     },
     [onBlobsChange],
   )
@@ -676,6 +674,7 @@ export default function MarkdownEditor({
   }, [])
 
   const charCount = value.length
+  const imageCount = (value.match(/!\[[^\]]*\]\([^)]*\)/g) || []).length
 
   return (
     <>

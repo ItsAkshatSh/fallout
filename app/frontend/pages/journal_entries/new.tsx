@@ -136,7 +136,8 @@ function NewJournal({
   const Deferred = is_modal ? ModalDeferred : InertiaDeferred
 
   const charCount = useMemo(() => countMarkdownChars(markdown), [markdown])
-  const hasEnoughImages = blobSignedIds.length >= MIN_IMAGES
+  const markdownImageCount = (markdown.match(/!\[[^\]]*\]\([^)]*\)/g) || []).length
+  const hasEnoughImages = markdownImageCount >= MIN_IMAGES
   const hasEnoughChars = charCount >= MIN_CHARS
   const canSubmit = selectedProject && selectedTimelapses.size > 0 && hasEnoughImages && hasEnoughChars
 
@@ -242,7 +243,7 @@ function NewJournal({
                 Min characters {charCount}/{MIN_CHARS}
               </span>
               <span className={hasEnoughImages ? 'text-dark-brown' : 'text-red-500'}>
-                Min images {blobSignedIds.length}/{MIN_IMAGES}
+                Min images {markdownImageCount}/{MIN_IMAGES}
               </span>
             </div>
           </div>
