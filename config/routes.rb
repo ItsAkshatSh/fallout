@@ -99,23 +99,19 @@
 #                        jobs GET    /:status/jobs(.:format)                                        mission_control/jobs/jobs#index
 #                        root GET    /                                                              mission_control/jobs/queues#index
 
-require_relative "../lib/constraints/staff_constraint"
-require_relative "../lib/constraints/admin_constraint"
-require_relative "../lib/constraints/reviewer_constraint"
-
 Rails.application.routes.draw do
   # Redirect to localhost from 127.0.0.1 to use same IP address with Vite server
   constraints(host: "127.0.0.1") do
     get "(*path)", to: redirect { |params, req| "#{req.protocol}localhost:#{req.port}/#{params[:path]}" }
   end
-  constraints StaffConstraint.new do
+  constraints Constraints::StaffConstraint.new do
     namespace :admin do
       get "/" => "static_pages#index", as: :root
       resources :ships, only: [ :index, :show, :edit, :update ], path: "reviews"
     end
   end
 
-  constraints AdminConstraint.new do
+  constraints Constraints::AdminConstraint.new do
     mount MissionControl::Jobs::Engine, at: "/jobs"
 
     namespace :admin do
