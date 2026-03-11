@@ -1,12 +1,13 @@
 class Ahoy::Store < Ahoy::DatabaseStore
   def track_visit(data)
     data[:ip] = request.headers["CF-Connecting-IP"] || request.remote_ip
-    data[:utm_source] ||= request.params["ref"] if request.params["ref"].present?
+    data[:utm_source] ||= request.query_parameters["ref"] if request.query_parameters["ref"].present?
     super(data)
   end
 end
 
 Ahoy.api = false
+Ahoy.cookies = true
 Ahoy.geocode = true
 Ahoy.job_queue = :background
 
