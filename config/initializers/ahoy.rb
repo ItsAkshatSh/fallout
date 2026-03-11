@@ -7,8 +7,12 @@ class Ahoy::Store < Ahoy::DatabaseStore
 end
 
 Ahoy.api = false
-Ahoy.visit_duration = 4.hours
-Ahoy.cookie_domain = :all
-Ahoy.cookies = :none
 Ahoy.geocode = true
-Ahoy.job_queue = :default
+Ahoy.job_queue = :background
+
+# Disable tracking in development
+if Rails.env.development?
+  class Ahoy::Store
+    def exclude? = true
+  end
+end
