@@ -77,6 +77,14 @@ export interface ProjectDetail {
   created_at: string
 }
 
+export interface JournalEntryCard {
+  id: number
+  content_html: string
+  images: string[]
+  recordings_count: number
+  created_at: string
+}
+
 export interface ProjectForm {
   id?: number
   name: string

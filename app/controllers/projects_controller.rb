@@ -26,8 +26,11 @@ class ProjectsController < ApplicationController
   def show
     authorize @project
 
+    journal_entries = @project.journal_entries.kept.includes(:recordings, images_attachments: :blob).order(created_at: :desc)
+
     render inertia: {
       project: serialize_project_detail(@project),
+      journal_entries: journal_entries.map { |je| serialize_journal_entry_card(je) },
       can: {
         update: policy(@project).update?,
         destroy: policy(@project).destroy?
@@ -129,6 +132,16 @@ class ProjectsController < ApplicationController
       tags: project.tags,
       user_display_name: project.user.display_name,
       created_at: project.created_at.strftime("%B %d, %Y")
+    }
+  end
+
+  def serialize_journal_entry_card(journal_entry)
+    {
+      id: journal_entry.id,
+      content_html: helpers.render_user_markdown(journal_entry.content.to_s),
+      images: journal_entry.images.map { |img| url_for(img) },
+      recordings_count: journal_entry.recordings.size,
+      created_at: journal_entry.created_at.strftime("%B %d, %Y")
     }
   end
 end

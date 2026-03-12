@@ -1,6 +1,6 @@
 import { router, Link } from '@inertiajs/react'
 import { notify } from '@/lib/notifications'
-import type { ProjectDetail } from '@/types'
+import type { ProjectDetail, JournalEntryCard } from '@/types'
 
 function isSafeUrl(url: string | null): boolean {
   if (!url) return false
@@ -14,9 +14,11 @@ function isSafeUrl(url: string | null): boolean {
 
 export default function ProjectsShow({
   project,
+  journal_entries,
   can,
 }: {
   project: ProjectDetail
+  journal_entries: JournalEntryCard[]
   can: { update: boolean; destroy: boolean }
 }) {
   function deleteProject() {
@@ -77,6 +79,36 @@ export default function ProjectsShow({
       <p className="text-sm text-gray-500">
         Created by {project.user_display_name} on {project.created_at}
       </p>
+
+      {journal_entries.length > 0 && (
+        <div className="mt-8">
+          <h2 className="font-bold text-2xl mb-4">Journal Entries</h2>
+          <div className="space-y-6">
+            {journal_entries.map((entry) => (
+              <div key={entry.id} className="border rounded-lg p-5">
+                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: entry.content_html }} />
+
+                {entry.images.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {entry.images.map((src, i) => (
+                      <img key={i} src={src} alt="" className="rounded h-32 object-cover" />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 mt-4 text-sm text-gray-500">
+                  <span>{entry.created_at}</span>
+                  {entry.recordings_count > 0 && (
+                    <span>
+                      {entry.recordings_count} recording{entry.recordings_count !== 1 && 's'}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
