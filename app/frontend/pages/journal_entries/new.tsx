@@ -263,7 +263,7 @@ function NewJournal({
           key={tab}
           type="button"
           onClick={() => setRightTab(tab)}
-          className={`absolute right-0 translate-x-full w-42 h-16 z-10 flex cursor-pointer motion-safe:hover:scale-105 origin-left motion-safe:transition-transform ${rightTab === tab ? 'bg-brown' : 'bg-dark-brown'}`}
+          className={`absolute right-0 translate-x-full w-42 h-16 z-10 flex cursor-pointer motion-safe:hover:scale-105 origin-left motion-safe:transition-transform ${rightTab === tab ? 'bg-brown scale-105' : 'bg-dark-brown'}`}
           style={{
             top: `${3 + i * 5}rem`,
             clipPath: 'polygon(0 0, 100% 0, calc(100% - 1rem) 50%, 100% 100%, 0 100%)',
@@ -468,12 +468,11 @@ function NewJournal({
 
 function DisabledOverlay() {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-dark-brown/30 rounded cursor-default">
-      <p className="text-lg font-bold text-dark-brown">Select a project at top left first!</p>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-brown/30 rounded cursor-default">
+      <p className="text-lg font-bold text-dark-brown">Select a project at the top left first!</p>
     </div>
   )
 }
-
 
 const SKELETON_TIMELAPSES: Timelapse[] = Array.from({ length: 4 }, (_, i) => ({
   id: `skeleton-${i}`,
