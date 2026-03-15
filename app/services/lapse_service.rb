@@ -106,20 +106,21 @@ module LapseService
     nil
   end
 
-  def my_published_timelapses(access_token, limit: 100)
+  def my_published_timelapses(access_token, limit: nil)
     raise ArgumentError, "access_token is required" if access_token.blank?
 
     all_timelapses = []
     cursor = nil
+    remaining = limit
 
     loop do
-      params = { limit: limit }
-      params[:cursor] = cursor if cursor
+      page_size = remaining ? [ remaining, 100 ].min : 100
 
       response = connection.get("/api/timelapse/myPublishedTimelapses") do |req|
         req.headers["Authorization"] = "Bearer #{access_token}"
         req.headers["Accept"] = "application/json"
-        req.params = params
+        req.params["limit"] = page_size
+        req.params["cursor"] = cursor if cursor
       end
 
       Rails.logger.debug("Lapse myPublishedTimelapses response: status=#{response.status} body=#{response.body.truncate(500)}")
@@ -136,12 +137,14 @@ module LapseService
       data = JSON.parse(response.body)
       timelapses = data.dig("data", "timelapses") || []
       all_timelapses.concat(timelapses)
+      remaining -= timelapses.size if remaining
 
       cursor = data.dig("data", "nextCursor")
       break if cursor.nil?
+      break if remaining && remaining <= 0
     end
 
-    all_timelapses
+    limit ? all_timelapses.first(limit) : all_timelapses
   rescue Unauthorized
     raise
   rescue StandardError => e
