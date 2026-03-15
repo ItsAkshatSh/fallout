@@ -118,9 +118,8 @@ module LapseService
 
       response = connection.get("/api/timelapse/myPublishedTimelapses") do |req|
         req.headers["Authorization"] = "Bearer #{access_token}"
-        req.headers["Content-Type"] = "application/json"
         req.headers["Accept"] = "application/json"
-        req.body = params.to_json
+        req.params = params
       end
 
       Rails.logger.debug("Lapse myPublishedTimelapses response: status=#{response.status} body=#{response.body.truncate(500)}")
