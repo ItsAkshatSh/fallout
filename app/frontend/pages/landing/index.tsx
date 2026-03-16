@@ -1,16 +1,128 @@
 import { usePage, router } from '@inertiajs/react'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { ReactNode } from 'react'
 import type { SharedProps } from '@/types'
 import Frame from '@/components/shared/Frame'
 import FlashMessages from '@/components/FlashMessages'
 import { notify } from '@/lib/notifications'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import SpeechBubble from '@/components/onboarding/SpeechBubble'
 
 export default function LandingIndex() {
   const shared = usePage<SharedProps>().props
+  const falloutRef = useRef<HTMLImageElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const bgRef = useRef<HTMLImageElement>(null)
+  const cloudsRef = useRef<HTMLDivElement>(null)
+  const card1Ref = useRef<HTMLDivElement>(null)
+  const card2Ref = useRef<HTMLDivElement>(null)
+  const card3Ref = useRef<HTMLDivElement>(null)
+  const hoveredCardRef = useRef<number | null>(null)
+  const howSectionRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    gsap.registerPlugin(ScrollTrigger)
+
+    const ctx = gsap.context(() => {
+      const hero = document.getElementById('hero')!
+
+      gsap.to(cloudsRef.current, {
+        y: '35%',
+        ease: 'none',
+        scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: true },
+      })
+
+      const el = falloutRef.current
+      const container = containerRef.current
+      gsap.timeline()
+        .set(el, { y: -300, scaleX: 1, scaleY: 1 })
+        .to(el, { y: 0, duration: 0.3, ease: 'power2.in' })
+        .to(el, { scaleX: 1.1, scaleY: 0.6, duration: 0.1, ease: 'power1.out' })
+        .call(() => {
+          const shake = gsap.timeline()
+          for (let i = 0; i < 8; i++) {
+            shake.to(container, {
+              x: (Math.random() - 0.5) * 14,
+              y: (Math.random() - 0.5) * 10,
+              duration: 0.04,
+              ease: 'none',
+            })
+          }
+          shake.to(container, { x: 0, y: 0, duration: 0.08, ease: 'power2.out' })
+        })
+        .to(el, { scaleX: 0.85, scaleY: 1.2, duration: 0.15, ease: 'power2.out' })
+        .to(el, { scaleX: 1, scaleY: 1, duration: 0.2, ease: 'elastic.out(1, 0.5)' })
+
+
+    })
+
+    // Sticker behavior: nudge in cursor travel direction, then elastic spring back
+    const vel = { x: 0, y: 0, lx: 0, ly: 0 }
+    const trackMouse = (e: MouseEvent) => {
+      vel.x = vel.x * 0.5 + (e.clientX - vel.lx) * 0.5
+      vel.y = vel.y * 0.5 + (e.clientY - vel.ly) * 0.5
+      vel.lx = e.clientX
+      vel.ly = e.clientY
+    }
+    window.addEventListener('mousemove', trackMouse)
+
+    const stickerCleanups: (() => void)[] = []
+    document.querySelectorAll<HTMLElement>('.sticker').forEach((el) => {
+      const springBack = () => {
+        gsap.to(el, { x: 0, y: 0, duration: 1.8, ease: 'elastic.out(0.4, 0.28)', overwrite: 'auto' })
+      }
+      const onEnter = () => {
+        const cap = 20
+        const px = Math.max(-cap, Math.min(cap, vel.x * 3))
+        const py = Math.max(-cap, Math.min(cap, vel.y * 3))
+        gsap.killTweensOf(el)
+        gsap.to(el, { x: px, y: py, duration: 0.1, ease: 'power2.out', onComplete: springBack })
+      }
+      el.addEventListener('mouseenter', onEnter)
+      el.addEventListener('mouseleave', springBack)
+      stickerCleanups.push(() => {
+        el.removeEventListener('mouseenter', onEnter)
+        el.removeEventListener('mouseleave', springBack)
+      })
+    })
+
+    return () => {
+      ctx.revert()
+      window.removeEventListener('mousemove', trackMouse)
+      stickerCleanups.forEach((fn) => fn())
+    }
+  }, [])
+
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [currentSection, setCurrentSection] = useState('overview')
+
+  function animateHowCards(hoveredIndex: number, entering: boolean) {
+    const cards = [card1Ref.current, card2Ref.current, card3Ref.current]
+    const angles = [-8, 5, -6]
+
+    if (entering) {
+      hoveredCardRef.current = hoveredIndex
+      cards.forEach((card, i) => {
+        if (i === hoveredIndex) {
+          gsap.to(card, { y: -70, rotation: angles[i], scale: 1.04, zIndex: 20, duration: 0.35, ease: 'back.out(1.2)' })
+        } else {
+          const dir = Math.sign(i - hoveredIndex)
+          gsap.to(card, { x: dir * 55, y: 20, rotation: dir * 6, scale: 0.95, duration: 0.3, ease: 'back.out(1.2)' })
+        }
+      })
+    } else {
+      // Defer reset so a card-to-card transition doesn't briefly snap back
+      setTimeout(() => {
+        if (hoveredCardRef.current !== hoveredIndex) return
+        hoveredCardRef.current = null
+        cards.forEach((card) => {
+          gsap.to(card, { x: 0, y: 0, rotation: 0, scale: 1, zIndex: 1, duration: 0.4, ease: 'back.out(1.4)' })
+        })
+      }, 20)
+    }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -43,7 +155,7 @@ export default function LandingIndex() {
   ]
 
   return (
-    <div className="w-screen h-full flex flex-col justify-center bg-blue overflow-hidden">
+    <div ref={containerRef} className="w-screen h-full flex flex-col justify-center overflow-hidden">
       <title>Fallout: Hardware Hackathon</title>
       <meta
         name="description"
@@ -57,32 +169,31 @@ export default function LandingIndex() {
       />
       <meta property="og:site_name" content="Fallout" />
 
-      <section className="relative w-full min-h-svh md:h-[120vh] flex flex-col items-center pt-4 md:p-5 gap-4">
-        <div className="w-full flex justify-center items-center lg:items-start h-full top-0 absolute gap-[10%]">
+      <section id="hero" className="bg-blue relative w-full min-h-svh md:h-[120vh] flex flex-col items-center pt-4 md:p-5 gap-4 overflow-hidden">
+        <img src="/landing/hc.svg" className="w-50 absolute top-4 left-0 z-20" />
+        <div ref={cloudsRef} className="w-full flex justify-center items-center lg:items-start h-full top-0 absolute gap-[10%]">
           <img src="/landing/cloud_1.webp" alt="" className="h-auto lg:h-[80%] w-auto pointer-events-none" />
           <img src="/landing/cloud_2.webp" alt="" className=" h-auto lg:h-[80%] w-auto pointer-events-none" />
         </div>
         <img
+          ref={bgRef}
           className="absolute inset-0 w-full h-full object-cover scale-110 z-0 -top-10"
           src="/landing/bg.webp"
           alt=""
           aria-hidden="true"
         />
         <div className="flex h-8 gap-4 z-1">
-          <img className="w-auto h-full" src="/fallout.svg" alt="fallout" />
-          <img className="w-auto h-full" src="/hackclub.svg" alt="hackclub" />
         </div>
 
-        <div className="z-1 flex flex-col items-center w-full px-4 md:px-0 mt-6 sm:mt-14 xl:mt-24 gap-3 sm:gap-4">
+        <div className="z-1 flex flex-col items-center w-full px-4 md:px-0 mt-6 sm:mt-14 xl:mt-18 gap-3 sm:gap-4">
           <div className="text-white text-lg md:text-xl lg:text-2xl tracking-[5%] text-center">
-            July 1-7, 2026 - Starting Soon
+            JULY 1-7, 2026
           </div>
-          <h1 className="text-white text-center tracking-[5%] text-shadow-md text-shadow-blue font-bold text-3xl! sm:text-4xl! xl:text-6xl!">
-            Build 60h of hardware projects,
-            <br />
-            Go to ShenZhen!
+          <img ref={falloutRef} className="sticker w-auto h-full" src="/fallout.svg" alt="fallout" />
+          <h1 className="shake text-white text-center tracking-[5%] text-shadow-md text-shadow-blue text-4xl">
+            {/* Build 60h of hardware projects, Go to ShenZhen! */}
+            Build 60h of hardware... Go to Shenzhen!
           </h1>
-
           <Frame className="w-full max-w-[calc(100%-1rem)] sm:max-w-150 ml-1">
             <form
               className="w-full h-full flex px-2 sm:px-4 py-2 text-xl items-center justify-between gap-2"
@@ -101,145 +212,98 @@ export default function LandingIndex() {
                 aria-label="Submit"
                 disabled={submitting}
               >
-                {submitting ? '...' : 'Join Beta'}
+                {submitting ? '...' : 'ENTER'}
               </button>
             </form>
           </Frame>
           <FlashMessages />
-          <p className="text-white text-base">For teenagers 13-18</p>
-          <a href={shared.sign_in_path} className="text-white underline text-sm">
-            Sign in with HCA
-          </a>
+          <p className="text-white text-base -mt-4">For teenagers 13-18</p>
+
         </div>
       </section>
 
-      <div className="-mt-20 mb-20 py-4 w-full">
-        <div className="w-[110%] overflow-hidden -translate-x-2 -rotate-2 bg-dark-brown text-white text-3xl py-3 sm:py-8 z-10 relative">
-          <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .marquee-track {
-          display: flex;
-          width: max-content;
-          animation: marquee 18s linear infinite;
-        }
-        .marquee-track:hover {
-          animation-play-state: paused;
-        }
-      `}</style>
-          <ul className="marquee-track list-none m-0 p-0 text-2xl" aria-label="Event highlights">
-            {[
-              'Teens 13-18',
-              "Everything's free",
-              '100+ students',
-              'For teens worldwide',
-              'Teens 13-18',
-              "Everything's free",
-              '100+ students',
-              'For teens worldwide',
-            ].map((item, i) => (
-              <li key={i} className="flex items-center">
-                <span className="mx-6 sm:mx-10 text-2xl sm:text-4xl">{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="relative w-full overflow-hidden -mt-10">
-          <video className="w-full h-full object-cover" src="/landing/video.mp4" autoPlay loop muted playsInline />
-          <div className="absolute inset-0 bg-black/40"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-white text-3xl sm:text-5xl md:text-6xl font-bold text-center">
-              It's one of a kind.
-            </span>
+      <div className="bg-white">
+        <div className="py-12 px-4 md:px-10 lg:px-20 w-full z-20 flex items-center ">
+          <div className="w-full aspect-16/9 rounded-xl grid grid-cols-1 grid-rows-1">
+            <div className="col-start-1 row-start-1 w-full h-full overflow-hidden rounded-lg">
+              <video
+                className="w-full h-full object-cover"
+                src="/landing/video.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            </div>
+            <div className="col-start-1 row-start-1 bg-black/60 w-full h-full border-2 border-green rounded-lg relative">
+              {/* <img src="/fallout.svg" className="h-10 w-auto absolute top-4 left-1/2 -translate-x-1/2" /> */}
+              <span className="w-full max-w-[70%] text-beige text-3xl sm:text-4xl xl:text-7xl font-bold text-center absolute bottom-8 left-1/2 -translate-x-1/2">Build 60h of hardware... Go to Shenzhen! <span className="text-coral">This is Lorem</span></span>
+              <img src="/fallOut.png" className="sticker w-30 h-auto absolute top-1/2 -translate-y-1/2 -left-10 z-10" />
+              <img src="/sz.png" className="sticker w-30 h-auto absolute bottom-60 -right-10" />
+              <img src="/sticker.png" className="sticker w-50 h-auto absolute bottom-10 -right-20" />
+              <img src="/koifish.webp" className="sticker w-50 h-auto absolute -bottom-8 -left-20" />
+            </div>
           </div>
         </div>
       </div>
+      <div>
 
-      <section className="pb-10 bg-blue">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 w-full gap-6 p-6 md:px-20">
-          <div className="min-w-60 bg-green rounded-xl p-8 pb-12 space-y-4 text-center flex flex-col items-center text-white tracking-[5%]">
-            <h2 className="text-4xl xl:text-5xl font-bold">DESIGN</h2>
-            <div
-              className="w-full opacity-90 rounded-xl aspect-2/1 bg-cover bg-center"
-              style={{ backgroundImage: 'url(/landing/step_1.webp)' }}
-            ></div>
-            <h3 className="text-3xl leading-8 font-medium">Design. Learn. Repeat.</h3>
-            <ol className="list-decimal list-inside text-left text-2xl">
-              <li>Design your project</li>
-              <li>Submit &gt; Get approved</li>
-              <li>Receive a grant to buy parts!</li>
-            </ol>
+      </div>
+      <section ref={howSectionRef} id="how" className="bg-white py-30 pt-60 px-4 md:px-10 lg:px-20 xl:px-40 2xl:px-60 flex flex-col sm:flex-row gap-10 px-8 text-white text-2xl 2xl:text-3xl leading-tight relative ">
+        {/* <img src="/arrow.png" className="absolute left-[33%] translate-x-1/2 -top-20 z-20" />
+        <img src="/arrow2.png" className="absolute left-[56%] translate-x-1/2 -bottom-20 z-20" /> */}
+
+        <div ref={card1Ref} onMouseEnter={() => animateHowCards(0, true)} onMouseLeave={() => animateHowCards(0, false)} className="relative w-full sm:w-[33%] bg-dark-brown min-h-60 aspect-5/6 rounded-lg p-4 bg-cover hover:border-8 border-green bg-center outline-2 outline-beige hover:shadow-sm group" style={{ backgroundImage: "url('/1.png')" }}>
+          <div className="-ml-4 pl-4 pb-2">
+            <span className="py-2 text-shadow-lg text-shadow-dark-brown">Design your project!</span>
           </div>
-          <div className="min-w-60 bg-[#F5C634] rounded-xl p-8 pb-12 space-y-4 text-center flex flex-col items-center text-white tracking-[5%]">
-            <h2 className="text-4xl xl:text-5xl font-bold">BUILD</h2>
-            <div
-              className="w-full opacity-90 rounded-xl aspect-2/1 bg-cover bg-center"
-              style={{ backgroundImage: 'url(/landing/step_2.webp)' }}
-            ></div>
-            <h3 className="text-3xl leading-8 font-medium">Build. Iterate. Repeat.</h3>
-            <span className="text-2xl font-light text-left">Buy the parts with your grant & Build your project!</span>
+          <div className="absolute top-0 right-0 w-16 h-16 bg-green rounded-tr-lg group-hover:rounded-tr-none rounded-bl-2xl flex justify-center items-center">
+            <span className="text-4xl font-bold text-white">1</span>
           </div>
-          <div className="min-w-60 bg-[#F761BD] rounded-xl p-8 pb-12 space-y-4 text-center flex flex-col items-center text-white tracking-[5%]">
-            <h2 className="text-4xl xl:text-5xl font-bold">BUILD IRL</h2>
-            <div
-              className="w-full opacity-90 rounded-xl aspect-2/1 bg-cover bg-center"
-              style={{ backgroundImage: 'url(/landing/step_3.webp)' }}
-            ></div>
-            <h3 className="text-3xl leading-8 font-medium">Join us in ShenZhen</h3>
-            <span className="text-2xl font-light text-left">
-              Share your project to the world, get an invite to build in-person!
-            </span>
+        </div>
+
+        <div ref={card2Ref} onMouseEnter={() => animateHowCards(1, true)} onMouseLeave={() => animateHowCards(1, false)} className="relative w-full sm:w-[33%] bg-dark-brown min-h-60 rounded-lg p-4 hover:border-8 border-green flex flex-col aspect-5/6 bg-cover bg-center outline-2 outline-beige hover:shadow-sm group" style={{ backgroundImage: "url('/2.png')" }}>
+          <span className="text-shadow-lg text-shadow-dark-brown pr-16">Buy the parts with your grant & Build your project!</span>
+
+             <div className="absolute top-0 right-0 w-16 h-16 bg-green rounded-tr-lg group-hover:rounded-tr-none rounded-bl-2xl flex justify-center items-center">
+            <span className="text-4xl font-bold text-white">2</span>
           </div>
+        </div>
+
+        <div ref={card3Ref} onMouseEnter={() => animateHowCards(2, true)} onMouseLeave={() => animateHowCards(2, false)} className="hover:shadow-sm group relative w-full sm:w-[33%] min-h-60 rounded-lg flex flex-col hover:border-8 border-green aspect-5/6 bg-cover bg-center text-dark-brown outline-2 outline-beige" style={{ backgroundImage: "url('/3.png')" }}>
+          {/* <h1 className="text-5xl font-bold text-coral bg-dark-brown w-fit py-2 px-4 rounded-lg m-4">Share</h1> */}
+          <div className="absolute top-0 right-0 w-16 h-16 bg-green rounded-tr-lg rounded-bl-2xl group-hover:rounded-tr-none flex justify-center items-center">
+            <span className="text-4xl font-bold text-white">3</span>
+          </div>
+          <span className="mt-auto bg-[#fdf6e8] p-4 w-full rounded-lg">Post your project online and earn your <span className="text-coral font-bold">ticket to Fallout</span>!</span>
+
         </div>
       </section>
 
-      <section className="text-white text-center flex flex-col justify-between">
-        <div className="h-20 sm:h-40"></div>
-        <div className="relative min-h-[30vh] flex flex-col items-center justify-center text-center gap-4 px-4">
-          <span className="tracking-[5%] text-4xl sm:text-6xl md:text-8xl font-bold">SHENZHEN</span>
-          <span className="text-lg sm:text-2xl tracking-[5%] font-light px-2">
-            <i>Can't make it? get prizes like a 3D printer in our shop!</i>
-          </span>
-          <img
-            src="/landing/fish_1.webp"
-            alt=""
-            className="hidden lg:block w-80 sm:w-120 h-auto absolute bottom-0 -left-10 lg:left-10"
-          />
-          <img
-            src="/landing/stingray.webp"
-            alt=""
-            className="hidden lg:block w-60 sm:w-100 h-auto absolute -top-40 md:-top-80 right-0 lg:right-30"
-          />
-          <img
-            src="/landing/fish_2.webp"
-            alt=""
-            className="hidden lg:block w-40 sm:w-60 h-auto absolute -bottom-20 lg:-bottom-20 -right-10 lg:right-0"
-          />
+      <section className="bg-blue pt-20 px-4 md:px-10 lg:px-20 xl:px-40 2xl:px-60 flex justify-between items-start relative">
+        <div className="relative z-10">
+          {/* <h3 className="text-3xl font-bold py-2 px-4 w-fit">VISIT</h3> */}
+          
+          <img src="/landing/shenzhen.svg" className="h-60 py-8 w-auto" />
+          <p className="max-w-200 w-full text-2xl leading-tight text-white">Lorem ipsum dolor sit, amet consectetur adipisicing elit. Excepturi libero at voluptas alias sapiente doloremque perspiciatis ratione adipisci velit distinctio dicta magni.</p>
         </div>
+        {/* <img src="/envelope.webp" className="w-40 h-auto relative z-10 cursor-pointer hover:scale-102 transtion-all" /> */}
+        
+        {/* <img src="/clouds/1.webp" className="absolute top-0 -left-8 w-80 h-auto opacity-70" />
+        <img src="/clouds/3.webp" className="absolute top-10 -right-20 w-100 h-auto opacity-70" />
+        <img src="/clouds/2.webp" className="absolute top-40 right-30 w-60 h-auto opacity-70" /> */}
 
-        <div className="relative w-full h-24 sm:h-40 overflow-x-hidden">
-          <img
-            src="/clouds/4.webp"
-            alt=""
-            className="absolute bottom-0 left-0 h-20 sm:h-30 md:h-40 -translate-x-1/4 z-0"
-          />
-          <img src="/clouds/1.webp" alt="" className="absolute bottom-0 left-1/4 sm:left-40 h-20 sm:h-30 z-0" />
-          <img src="/clouds/2.webp" alt="" className="absolute bottom-0 right-1/4 h-20 sm:h-30 z-0" />
-          <img
-            src="/clouds/3.webp"
-            alt=""
-            className="absolute bottom-0 right-0 h-20 sm:h-30 md:h-40 w-auto translate-x-1/4 z-0"
-          />
-        </div>
+
       </section>
 
-      <div className="w-full flex flex-col md:flex-row items-stretch min-h-75 md:min-h-125 py-10 md:py-20 px-6 md:px-8">
+      <div className="bg-blue  px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-16 w-full h-auto">
+
+      <Frame className="w-full h-[80vh] h-full">
+      <div className="w-full h-full flex flex-row justify-between text-brown px-4 lg:px-8 py-4 lg:py-8">
+        <div className="flex flex-col">
         <div
           role="tablist"
-          aria-label="Event information"
-          className="flex-1/4 flex flex-row md:flex-col flex-wrap justify-center items-center md:justify-start whitespace-nowrap gap-2 md:gap-3 mb-4 md:mb-0 md:pr-4"
+          className="flex flex-row md:flex-col flex-wrap items-start justify-start whitespace-nowrap gap-2 md:gap-6 w-[230px] mt-1"
         >
           {sections.map((section) => (
             <button
@@ -249,18 +313,18 @@ export default function LandingIndex() {
               aria-controls={`panel-${section.id}`}
               id={`tab-${section.id}`}
               onClick={() => setCurrentSection(section.id)}
-              className={`py-1 md:py-2 rounded-md text-base md:text-2xl flex items-center gap-2
-            ${currentSection === section.id ? 'text-yellow font-bold' : 'text-white'}`}
+              className={`text-base md:text-2xl cursor-pointer 
+            ${currentSection === section.id ? 'font-bold text-light-brown bg-brown py-2 px-4 rounded-lg' : 'hover:ml-4 transition-all ease-in-out'}`}
             >
-              {currentSection === section.id && (
-                <img src="/landing/star.webp" alt="" aria-hidden="true" className="w-5 h-5 md:w-6 md:h-6" />
-              )}
               {section.label}
             </button>
           ))}
+          <p className="mt-20">Read more on <a className="underline font-medium" href="" target="_self">our Docs</a></p>
         </div>
 
-        <div className="w-full text-left text-white md:border-l-2 py-4">
+        </div>
+
+        <div className="w-full text-left">
           {sections.map((section) => (
             <div
               key={section.id}
@@ -268,15 +332,12 @@ export default function LandingIndex() {
               id={`panel-${section.id}`}
               aria-labelledby={`tab-${section.id}`}
               hidden={currentSection !== section.id}
-              className="px-2 md:px-20 text-lg md:text-xl space-y-3"
+              className="px-2 md:px-6 py-6 text-lg md:text-2xl space-y-3 rounded-lg bg-beige h-full"
             >
               {section.id === 'overview' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">OVERVIEW</h2>
-                  <p>Welcome to Fallout! We're still working on releasing this, but it'll be soon!</p>
-                  <p>
-                    <strong>RSVP above and we'll let you know when we kick off!</strong>
-                  </p>
+                  {/* <h2 className="text-3xl font-bold mb-4">OVERVIEW</h2> */}
+                  <p>Welcome to Fallout!</p>
                   <p>Imagine kicking off summer in Shenzhen, the hardware capital of the world.</p>
                   <p>Never tried hardware before? This is your chance to start.</p>
                   <p>
@@ -291,7 +352,6 @@ export default function LandingIndex() {
               )}
               {section.id === 'qualifying' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">QUALIFYING</h2>
                   <p>Spend 60h designing and building hardware projects to get invited to Fallout!</p>
                   <p>The premise is simple:</p>
                   <ol className="list-decimal list-outside ml-7 space-y-1">
@@ -305,7 +365,7 @@ export default function LandingIndex() {
               )}
               {section.id === 'requirements' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">WHAT COUNTS?</h2>
+                  <h2 className="text-3xl font-bold mb-4">WHAT COUNTS?</h2>
                   <p>
                     Build a hardware project you've always wanted to make. We value effort more than technical ability.
                     It can be really simple, but the end result should feel closer to a product than a demo, a
@@ -323,7 +383,7 @@ export default function LandingIndex() {
               )}
               {section.id === 'shipping' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">SHIPPING & SUBMITTING</h2>
+                  <h2 className="text-3xl font-bold mb-4">SHIPPING & SUBMITTING</h2>
                   <p>
                     Shipping is making your project <em>real</em>. Putting it out into the world and making it
                     re-creatable for someone else. For Fallout, you need to:
@@ -341,7 +401,6 @@ export default function LandingIndex() {
               )}
               {section.id === 'travel' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">TRAVEL & EVENT</h2>
                   <p>
                     We're running Fallout at the center of the world's tech manufacturing, ShenZhen China. For the week
                     of July 1-7, you'll be able to browse the world's largest hardware and electronics market,
@@ -354,7 +413,7 @@ export default function LandingIndex() {
               )}
               {section.id === 'parents' && (
                 <>
-                  <h2 className="text-2xl font-semibold mb-4">FOR PARENTS</h2>
+                  <h2 className="text-3xl font-bold mb-4">FOR PARENTS</h2>
                   <p>
                     We understand that letting your teen travel to a foreign country can be intimidating. You probably
                     have a lot of questions, and are wondering if this is a good idea. We'll be releasing a parent's
@@ -381,18 +440,35 @@ export default function LandingIndex() {
             </div>
           ))}
         </div>
-      </div>
-
-      <footer className="bg-dark-brown text-white text-center py-8">
-        <p className="text-xl font-medium">Fallout is made with ♡ by teenagers, for teenagers</p>
-        <div className="space-x-4 mt-2">
-          <a href="https://hackclub.com" target="_blank" rel="noreferrer" className="underline text-xl">
-            Hack Club
-          </a>
-          <a href="https://hackclub.com/slack" target="_blank" rel="noreferrer" className="underline text-xl">
-            Join Our Slack
-          </a>
         </div>
+      </Frame>
+      </div>
+      <div className="bg-blue  relative z-10 px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54  bg-red flex items-end p-4">
+      <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all">
+        <span className="group-hover:hidden">春天</span>
+        <span className="hidden group-hover:inline">春梦</span>
+      </div>
+      <p></p>
+        <div className="w-60 lg:w-80 -mb-10 ml-auto flex flex-col items-center justify-center text-center">
+          <SpeechBubble>Don’t see your question? Ask in <a href="https://hackclub.enterprise.slack.com/archives/C0ACJ290090" target="_blank" rel="noreferrer" className="underline">#fallout-help</a></SpeechBubble>
+          <img src="/chineseHeidi.gif" className="w-40 h-auto  z-20" />
+        </div>
+         
+        </div>
+      <footer className="px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 bg-green text-beige py-4 relative flex justify-between items-end">
+        
+        <div className="">
+          <p className="text-xl font-medium mt-2">Fallout is made with ♡ by teenagers, for teenagers</p>
+          <div className="space-x-4">
+            <a href="https://hackclub.com" target="_blank" rel="noreferrer" className="underline text-xl">
+              Hack Club
+            </a>
+            <a href="https://hackclub.com/slack" target="_blank" rel="noreferrer" className="underline text-xl">
+              Join Our Slack
+            </a>
+          </div>      
+        </div>
+        <a href="#hero" className="underline">back to top</a>
       </footer>
     </div>
   )
