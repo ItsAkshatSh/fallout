@@ -170,7 +170,7 @@ export default function LandingIndex() {
       <meta property="og:site_name" content="Fallout" />
 
       <section id="hero" className="bg-blue relative w-full min-h-svh md:h-[120vh] flex flex-col items-center pt-4 md:p-5 gap-4 overflow-hidden">
-        <img src="/landing/hc.svg" className="w-50 absolute top-4 left-0 z-20" />
+        <img src="/landing/flag.svg" className="w-20 absolute top-4 -translate-x-1/2 left-1/2 z-20" />
         <div ref={cloudsRef} className="w-full flex justify-center items-center lg:items-start h-full top-0 absolute gap-[10%]">
           <img src="/landing/cloud_1.webp" alt="" className="h-auto lg:h-[80%] w-auto pointer-events-none" />
           <img src="/landing/cloud_2.webp" alt="" className=" h-auto lg:h-[80%] w-auto pointer-events-none" />
@@ -224,14 +224,14 @@ export default function LandingIndex() {
       </section>
 
 
-      <div className="bg-blue  px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-16 w-full h-auto">
+      <div className="bg-[#41D2FF] px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-16 w-full h-auto">
 
       <Frame className="w-full h-[80vh] h-full">
-      <div className="w-full h-full flex flex-row justify-between text-brown px-4 lg:px-8 py-4 lg:py-8">
+      <div className="w-full h-full flex flex-col sm:flex-row justify-between text-brown px-4 lg:px-8 py-4 lg:py-8">
         <div className="flex flex-col">
         <div
           role="tablist"
-          className="flex flex-row md:flex-col flex-wrap items-start justify-start whitespace-nowrap gap-2 md:gap-6 w-[230px] mt-1"
+          className="w-full flex flex-row sm:flex-col flex-wrap items-start justify-start whitespace-nowrap gap-2 md:gap-6 min-w-[230px] mt-1"
         >
           {sections.map((section) => (
             <button
@@ -247,7 +247,7 @@ export default function LandingIndex() {
               {section.label}
             </button>
           ))}
-          <p className="mt-20">Read more on <a className="underline font-medium" href="https://fallout.hackclub.com/docs" target="_self">our Docs</a></p>
+          <p className="my-2 sm:mt-20 mt-auto bg-brown border-2 border-dark-brown shadow-md text-beige rounded-lg px-4 py-2 ">Read more on <a className="underline font-medium" href="https://fallout.hackclub.com/docs" target="_self">our Docs</a></p>
         </div>
 
         </div>
@@ -371,19 +371,28 @@ export default function LandingIndex() {
         </div>
       </Frame>
       </div>
-      <div className="bg-blue  relative z-10 px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54  bg-red flex items-end p-4">
-      <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all">
-        <span className="group-hover:hidden">春天</span>
-        <span className="hidden group-hover:inline">春梦</span>
+      <div className="bg-[#41D2FF] relative z-10 px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54  bg-red flex items-end p-4">
+      <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all flex ">
+        <span className="">春</span>
+        <span className="group-hover:hidden">天</span>
+        <span className="hidden group-hover:inline">梦</span>
       </div>
       <p></p>
         <div className="w-60 lg:w-80 -mb-10 ml-auto flex flex-col items-center justify-center text-center">
-          <SpeechBubble>Don’t see your question? Ask in <a href="https://hackclub.enterprise.slack.com/archives/C0ACJ290090" target="_blank" rel="noreferrer" className="underline">#fallout-help</a></SpeechBubble>
+            <div className={`relative bg-beige h-auto w-auto p-3 sm:px-6 sm:py-4 rounded-2xl `}>
+              <span className="relative z-1 text-base lg:text-lg text-brown text-center font-medium">Don’t see your question? Ask in <a href="https://hackclub.enterprise.slack.com/archives/C0ACJ290090" target="_blank" rel="noreferrer" className="underline">#fallout-help</a></span>
+           
+                <svg className="absolute -bottom-4 left-1/2 -translate-x-1/2" width="24" height="16" viewBox="0 0 24 16">
+                  <polygon points="0,0 24,0 12,16" className="fill-white" strokeWidth="2" />
+                  <polygon points="1,0 23,0 12,14" className="fill-white" />
+                </svg>
+              
+            </div>
           <img src="/chineseHeidi.gif" className="w-40 h-auto  z-20" />
         </div>
          
         </div>
-      <footer className="px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 bg-green text-beige py-4 relative flex justify-between items-end">
+      <footer className="px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 bg-dark-brown text-beige py-4 relative flex justify-between items-end">
         
         <div className="">
           <p className="text-xl font-medium mt-2">Fallout is made with ♡ by teenagers, for teenagers</p>
