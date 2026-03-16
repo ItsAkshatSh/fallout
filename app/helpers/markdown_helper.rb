@@ -351,18 +351,22 @@ module MarkdownHelper
       end
     end
 
-    result = sort.call(top_level).map { |i| { type: "link", title: i[:title], path: i[:path] } }
+    # Build a unified list of top-level links and sections, each with a priority for sorting
+    entries = sort.call(top_level).map { |i| { type: "link", title: i[:title], path: i[:path], priority: i[:priority] } }
 
     sections.each do |key, section_items|
       sorted = sort.call(section_items)
-      result << {
+      meta = load_section_metadata(key)
+      entries << {
         type: "section",
-        title: key.tr("-_", " ").split.map(&:capitalize).join(" "),
-        items: sorted.map { |i| { title: i[:title], path: i[:path] } }
+        title: meta[:title] || key.tr("-_", " ").split.map(&:capitalize).join(" "),
+        items: sorted.map { |i| { title: i[:title], path: i[:path] } },
+        priority: meta[:priority],
+        default_open: meta[:default_open]
       }
     end
 
-    result
+    entries.sort_by { |e| [ e[:priority].nil? ? Float::INFINITY : e[:priority].to_i, e[:title].downcase ] }
   end
 
   def docs_meta_for_url(url)
@@ -390,6 +394,16 @@ module MarkdownHelper
   end
 
   private
+
+  def load_section_metadata(section_key)
+    path = Rails.root.join("docs", section_key, "metadata.yml")
+    return { title: nil, priority: nil } unless File.exist?(path)
+
+    data = YAML.safe_load(File.read(path)) || {}
+    { title: data["title"], priority: data["priority"], default_open: data.fetch("default_open", true) }
+  rescue
+    { title: nil, priority: nil, default_open: true }
+  end
 
   def external_link?(href)
     return false if href.start_with?("#", "/", "./", "../")

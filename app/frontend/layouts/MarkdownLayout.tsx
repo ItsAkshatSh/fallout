@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { Link, usePage } from '@inertiajs/react'
 import Frame from '@/components/shared/Frame'
 import FlashMessages from '@/components/FlashMessages'
@@ -13,6 +13,7 @@ interface MenuSection {
   type: 'section'
   title: string
   items: { title: string; path: string }[]
+  default_open?: boolean
 }
 
 type MenuItem = MenuLink | MenuSection
@@ -47,18 +48,24 @@ function CollapsibleSection({
   title,
   items,
   currentPath,
+  defaultOpen = true,
 }: {
   title: string
   items: { title: string; path: string }[]
   currentPath: string
+  defaultOpen?: boolean
 }) {
   const storageKey = `docs-nav-${title}`
   const hasActiveChild = items.some((item) => currentPath === item.path)
   const [open, setOpen] = useState(() => {
     if (hasActiveChild) return true
     const stored = localStorage.getItem(storageKey)
-    return stored !== null ? stored === 'true' : true
+    return stored !== null ? stored === 'true' : defaultOpen
   })
+
+  useEffect(() => {
+    if (hasActiveChild) setOpen(true)
+  }, [currentPath])
 
   function toggle() {
     const next = !open
@@ -106,7 +113,7 @@ export default function MarkdownLayout({ children }: { children: ReactNode }) {
             </NavLink>
             {menu_items.map((item, i) =>
               item.type === 'section' ? (
-                <CollapsibleSection key={i} title={item.title} items={item.items} currentPath={currentPath} />
+                <CollapsibleSection key={i} title={item.title} items={item.items} currentPath={currentPath} defaultOpen={item.default_open !== false} />
               ) : (
                 <NavLink key={item.path} href={item.path} active={currentPath === item.path}>
                   {item.title}
