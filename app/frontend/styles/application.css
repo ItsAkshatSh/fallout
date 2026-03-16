@@ -528,4 +528,24 @@ textarea:focus {
     border-color: rgba(237, 209, 176, 0.2);
     color: #e8d5c4;
   }
+
+  .toc-sidebar button {
+    background-color: rgba(237, 209, 176, 0.2);
+  }
+
+  .toc-sidebar button.active {
+    background-color: #e8d5c4;
+  }
+
+  .toc-sidebar .bg-light-brown {
+    background-color: #1e1613;
+  }
+
+  .toc-sidebar .text-dark-brown {
+    color: #e8d5c4;
+  }
+
+  .toc-sidebar .border-dark-brown\/15 {
+    border-color: rgba(237, 209, 176, 0.15);
+  }
 }
