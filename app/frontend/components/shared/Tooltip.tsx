@@ -295,7 +295,8 @@ export function TooltipContent({ children, className }: { children: ReactNode; c
       const tr = triggerRef.current.getBoundingClientRect()
       const vh = window.innerHeight
       const vw = window.innerWidth
-      if (tr.bottom < 0 || tr.top > vh || tr.right < 0 || tr.left > vw) {
+      // Zero-size rect means the element is display:none (culled) — treat as offscreen
+      if (tr.bottom < 0 || tr.top > vh || tr.right < 0 || tr.left > vw || (tr.width === 0 && tr.height === 0)) {
         if (snapWhenOffscreen) {
           const snap = snapWhenOffscreen()
           const el = ref.current

@@ -67,7 +67,9 @@ class JournalEntriesController < ApplicationController
       end
     end
 
-    redirect_to project_path(@project), notice: "Journal created."
+    # Redirect to path when created from the journal modal so it closes and the path updates
+    destination = params[:return_to] == "path" ? path_path : project_path(@project)
+    redirect_to destination, notice: "Journal created."
   end
 
   private

@@ -107,6 +107,7 @@ function NewJournal({
   const [blobSignedIds, setBlobSignedIds] = useState<string[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [draftStatus, setDraftStatus] = useState<string | null>(null)
+  const modalRef = useRef<{ close: () => void }>(null)
 
   const draftKey = selectedProject ? `journal-draft-${selectedProject.id}` : null
   const [markdown, setMarkdown] = useState(() => {
@@ -231,24 +232,23 @@ function NewJournal({
   function handleSubmit() {
     if (!canSubmit) return
     setSubmitting(true)
-    router.post(
-      `/projects/${selectedProject.id}/journal_entries`,
-      {
-        timelapse_ids: Array.from(selectedTimelapses),
-        youtube_video_ids: youtubeVideos.map((v) => v.id),
-        content: markdown,
-        images: blobSignedIds,
+    const data: Record<string, unknown> = {
+      timelapse_ids: Array.from(selectedTimelapses),
+      youtube_video_ids: youtubeVideos.map((v) => v.id),
+      content: markdown,
+      images: blobSignedIds,
+    }
+    if (is_modal) data.return_to = 'path'
+    router.post(`/projects/${selectedProject.id}/journal_entries`, data, {
+      onSuccess: () => {
+        if (draftKey)
+          try {
+            localStorage.removeItem(draftKey)
+          } catch {}
+        modalRef.current?.close()
       },
-      {
-        onSuccess: () => {
-          if (draftKey)
-            try {
-              localStorage.removeItem(draftKey)
-            } catch {}
-        },
-        onFinish: () => setSubmitting(false),
-      },
-    )
+      onFinish: () => setSubmitting(false),
+    })
   }
 
   const ribbonTabs: { label: string; tab: 'lapse' | 'youtube' }[] = [
@@ -457,7 +457,7 @@ function NewJournal({
 
   if (is_modal) {
     return (
-      <Modal panelClasses="h-full" paddingClasses="max-w-5xl mx-auto" closeButton={false} maxWidth="7xl">
+      <Modal ref={modalRef} panelClasses="h-full" paddingClasses="max-w-5xl mx-auto" closeButton={false} maxWidth="7xl">
         <BookLayout className="max-h-[40em]">{content}</BookLayout>
       </Modal>
     )
@@ -516,6 +516,14 @@ function TimelapseBrowser({
     return (
       <div className="p-6 flex flex-col items-center gap-3">
         <p className="text-dark-brown">No timelapses found</p>
+        <a
+          href="https://lapse.hackclub.com/timelapse/create"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="py-1.5 px-4 border-2 font-bold uppercase cursor-pointer bg-brown text-light-brown border-dark-brown"
+        >
+          Record New Timelapse
+        </a>
       </div>
     )
   }
