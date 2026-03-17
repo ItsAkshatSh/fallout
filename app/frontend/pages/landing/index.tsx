@@ -20,6 +20,7 @@ export default function LandingIndex() {
   const card3Ref = useRef<HTMLDivElement>(null)
   const hoveredCardRef = useRef<number | null>(null)
   const howSectionRef = useRef<HTMLElement>(null)
+  const navRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger)
@@ -32,6 +33,7 @@ export default function LandingIndex() {
         ease: 'none',
         scrollTrigger: { trigger: hero, start: 'top top', end: 'bottom top', scrub: true },
       })
+
 
       const el = falloutRef.current
       const container = containerRef.current
@@ -80,12 +82,24 @@ export default function LandingIndex() {
       })
     })
 
+    const hero = document.getElementById('hero')!
+    gsap.set(navRef.current, { y: -80 })
+    const navTrigger = ScrollTrigger.create({
+      trigger: hero,
+      start: 'bottom top',
+      onEnter: () => gsap.to(navRef.current, { y: 0, duration: 0.5, ease: 'power2.out' }),
+      onLeaveBack: () => gsap.to(navRef.current, { y: -80, duration: 0.4, ease: 'power2.in' }),
+    })
+
     return () => {
       ctx.revert()
+      navTrigger.kill()
       stickerCleanups.forEach((fn) => fn())
     }
   }, [])
 
+  const [videoOpen, setVideoOpen] = useState(true)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
   const [email, setEmail] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [currentSection, setCurrentSection] = useState('overview')
@@ -160,7 +174,9 @@ export default function LandingIndex() {
   ]
 
   return (
+    <>
     <div ref={containerRef} className="w-screen h-full flex flex-col justify-center overflow-hidden">
+      
       <title>Fallout: Hardware Hackathon</title>
       <meta
         name="description"
@@ -174,7 +190,7 @@ export default function LandingIndex() {
       />
       <meta property="og:site_name" content="Fallout" />
 
-      <section id="hero" className="bg-blue relative w-full min-h-svh md:h-[120vh] flex flex-col items-center pt-4 md:p-5 gap-4 overflow-hidden">
+      <section id="hero" className="bg-blue relative md:h-[120vh] flex flex-col items-center pt-4 md:p-5 gap-4 overflow-hidden rounded-xl">
         <img src="/landing/flag.svg" className="w-20 absolute top-4 -translate-x-1/2 left-1/2 z-20" />
         <div ref={cloudsRef} className="w-full flex justify-center items-center lg:items-start h-full top-0 absolute gap-[10%]">
           <img src="/landing/cloud_1.webp" alt="" className="h-auto lg:h-[80%] w-auto pointer-events-none" />
@@ -224,11 +240,48 @@ export default function LandingIndex() {
           <FlashMessages />
           <p className="text-white text-base -mt-4">For teenagers 13-18</p>
           <a href={shared.sign_in_path} className="text-white text-sm underline -mt-2">Sign in with HCA</a>
+        </div>
+      </section>
+
+      {/* <section className="bg-blue w-full h-auto text-5xl text-center text-white flex items-center justify-center py-30">
+        <h2 className="max-w-[50%]">
+         Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nunc sit amet  tempus ex, vitae pretium lectus. Aliquam mau
+        </h2>
+
+      </section> */}
+
+      <section id="how" className="bg-blue py-20 pt-40 px-4 md:px-10 lg:px-20 xl:px-40 2xl:px-60 flex flex-col sm:flex-row gap-10 px-8 text-white text-2xl 2xl:text-3xl leading-tight relative ">
+        {/* <img src="/arrow.png" className="absolute left-[33%] translate-x-1/2 -top-20 z-20" />
+        <img src="/arrow2.png" className="absolute left-[56%] translate-x-1/2 -bottom-20 z-20" /> */}
+
+        <div ref={card1Ref} onMouseEnter={() => animateHowCards(0, true)} onMouseLeave={() => animateHowCards(0, false)} className="relative w-full sm:w-[33%] bg-dark-brown min-h-60 aspect-5/6 rounded-lg p-4 bg-cover hover:border-8 border-green bg-center outline-2 outline-beige hover:shadow-sm group" style={{ backgroundImage: "url('/1.png')" }}>
+          <div className="-ml-4 pl-4 pb-2">
+            <span className="py-2 text-shadow-lg text-shadow-dark-brown">Design your project!</span>
+          </div>
+          <div className="absolute top-0 right-0 w-16 h-16 bg-beige rounded-tr-lg group-hover:rounded-tr-none rounded-bl-2xl flex justify-center items-center">
+            <span className="text-4xl font-bold text-dark-brown">1</span>
+          </div>
+        </div>
+
+        <div ref={card2Ref} onMouseEnter={() => animateHowCards(1, true)} onMouseLeave={() => animateHowCards(1, false)} className="relative w-full sm:w-[33%] bg-dark-brown min-h-60 rounded-lg p-4 hover:border-8 border-green flex flex-col aspect-5/6 bg-cover bg-center outline-2 outline-beige hover:shadow-sm group" style={{ backgroundImage: "url('/2.png')" }}>
+          <span className="text-shadow-lg text-shadow-dark-brown pr-16">Buy the parts with your grant & Build your project!</span>
+
+          <div className="absolute top-0 right-0 w-16 h-16 bg-beige rounded-tr-lg group-hover:rounded-tr-none rounded-bl-2xl flex justify-center items-center">
+            <span className="text-4xl font-bold text-dark-brown">2</span>
+          </div>
+        </div>
+
+        <div ref={card3Ref} onMouseEnter={() => animateHowCards(2, true)} onMouseLeave={() => animateHowCards(2, false)} className="hover:shadow-sm group relative w-full sm:w-[33%] min-h-60 rounded-lg flex flex-col hover:border-8 border-green aspect-5/6 bg-cover bg-center text-dark-brown outline-2 outline-beige" style={{ backgroundImage: "url('/3.png')" }}>
+          {/* <h1 className="text-5xl font-bold text-coral bg-dark-brown w-fit py-2 px-4 rounded-lg m-4">Share</h1> */}
+          <div className="absolute top-0 right-0 w-16 h-16 bg-beige rounded-tr-lg rounded-bl-2xl group-hover:rounded-tr-none flex justify-center items-center">
+            <span className="text-4xl font-bold text-dark-brown">3</span>
+          </div>
+          <span className="mt-auto bg-[#fdf6e8] p-4 w-full rounded-lg">Post your project online and earn your <span className="text-coral font-bold">ticket to Fallout</span>!</span>
 
         </div>
       </section>
 
-
+      
       <div className="bg-[#41D2FF] px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-16 w-full h-auto">
 
       <Frame className="w-full h-[80vh] h-full">
@@ -374,10 +427,10 @@ export default function LandingIndex() {
       </Frame>
       </div>
       <div className="bg-[#41D2FF] relative z-10 px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54  bg-red flex items-end p-4">
-      <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all flex ">
+      {/* <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all flex ">
         <span className="">春</span>
         <span className="">天</span>
-      </div>
+      </div> */}
       <p></p>
         <div className="w-60 lg:w-80 -mb-10 ml-auto flex flex-col items-center justify-center text-center">
             <div className={`relative bg-beige h-auto w-auto p-3 sm:px-6 sm:py-4 rounded-2xl `}>
@@ -409,6 +462,50 @@ export default function LandingIndex() {
         <a href="#hero" className="underline">back to top</a>
       </footer>
     </div>
+    <div className="fixed bottom-10 right-10 w-100 h-auto rounded-lg overflow-hidden bg-[#37B576] z-50 flex flex-col border-2 border-beige">
+      <div className="w-full flex justify-between items-center px-4 py-2 cursor-pointer" onClick={() => {
+        setVideoOpen((v) => {
+          const next = !v
+          const msg = next ? 'playVideo' : 'pauseVideo'
+          iframeRef.current?.contentWindow?.postMessage(`{"event":"command","func":"${msg}","args":""}`, '*')
+          return next
+        })
+      }}>
+        <span className="font-medium text-beige text-2xl">{videoOpen ? 'Close Video' : 'Open Video'}</span>
+        <img src="/arrow.svg" className={`h-5 w-auto transition-transform duration-300 ${videoOpen ? 'rotate-180' : 'rotate-0'}`} />
+      </div>
+      <div className={`aspect-16/9 w-full h-auto p-3  pt-0${videoOpen ? '' : ' hidden'}`}>
+          <iframe
+            width="100%"
+            height="100%"
+            className="rounded-lg border-beige border-2"
+            ref={iframeRef}
+            src="https://www.youtube.com/embed/SrP2ZeNHm6s?si=orljJtYrC7EGSNzi&controls=0&modestbranding=1&rel=0&autoplay=1&&enablejsapi=1"
+            title="YouTube video player"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen>
+          </iframe>
+        </div>
+    </div>
+    {/* <div ref={navRef} className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-4 px-6 py-3 pointer-events-none">
+      <div className="grid grid-cols-3 items-center w-full  px-4 py-2 pointer-events-auto">
+        <div />
+        <img src="/fallout.svg" alt="fallout" className="h-8 w-auto place-self-center mix-blend-multiply" />
+        <div className="flex justify-end">
+          <form onSubmit={handleSubmit}>
+            <button
+              className="cursor-pointer disabled:opacity-50 border-2 border-dark-brown bg-brown text-light-brown text-xl font-bold whitespace-nowrap px-3 py-2 rounded-lg"
+              aria-label="Submit"
+              disabled={submitting}
+            >
+              {submitting ? '...' : 'START'}
+            </button>
+          </form>
+        </div>
+      </div>
+
+    </div> */}
+    </>
   )
 }
 
