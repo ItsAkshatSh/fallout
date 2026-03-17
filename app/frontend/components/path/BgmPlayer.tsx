@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import Frame from '@/components/shared/Frame'
 
-const BGM_SRC = '/bgm/falling_into_the_sky__kale_wu.mp3'
+const TRACKS = [
+  { src: '/bgm/falling_into_the_sky__kale_wu.mp3', title: 'Falling Into The Sky', artist: 'Kale Wu' },
+  { src: '/bgm/an_object_at_rest_jocy_lau.mp3', title: 'An Object at Rest', artist: 'Jocy Lau' },
+]
 const STORAGE_KEY = 'bgm-want'
 const VOLUME_KEY = 'bgm-volume'
 // Events that trigger user activation per the HTML spec, unlocking audio autoplay
@@ -18,6 +21,7 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [trackIndex, setTrackIndex] = useState(() => Math.floor(Math.random() * TRACKS.length))
   const [volume, setVolume] = useState(() => {
     try {
       return parseFloat(localStorage.getItem(VOLUME_KEY) ?? '0.5')
@@ -39,6 +43,8 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
   wantBgmRef.current = wantBgm
   const volumeRef = useRef(volume)
   volumeRef.current = volume
+  const trackIndexRef = useRef(trackIndex)
+  trackIndexRef.current = trackIndex
 
   useEffect(() => {
     const audio = new Audio()
@@ -54,7 +60,7 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
 
     // Defer the download until the browser is idle / page has loaded
     const loadSrc = () => {
-      audio.src = BGM_SRC
+      audio.src = TRACKS[trackIndexRef.current].src
     }
     const idleId = 'requestIdleCallback' in window ? window.requestIdleCallback(loadSrc) : undefined
     const fallbackTimer = idleId === undefined ? window.setTimeout(loadSrc, 0) : undefined
@@ -68,7 +74,7 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
 
     function tryPlay() {
       if (!wantBgmRef.current || !audio.paused) return
-      if (!audio.src) audio.src = BGM_SRC
+      if (!audio.src) audio.src = TRACKS[trackIndexRef.current].src
       audio
         .play()
         .then(() => {
@@ -107,7 +113,7 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
       setWantBgm(false)
       localStorage.setItem(STORAGE_KEY, 'false')
     } else {
-      if (!audio.src) audio.src = BGM_SRC
+      if (!audio.src) audio.src = TRACKS[trackIndex].src
       audio.volume = isMuted ? 0 : volume
       audio
         .play()
@@ -118,6 +124,24 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
             localStorage.setItem(STORAGE_KEY, 'true')
           }
         })
+        .catch(() => {})
+    }
+  }
+
+  function switchTrack(newIndex: number) {
+    const audio = audioRef.current
+    if (!audio) return
+    const wasPlaying = isPlaying
+    audio.pause()
+    audio.src = TRACKS[newIndex].src
+    audio.currentTime = 0
+    setCurrentTime(0)
+    setDuration(0)
+    setTrackIndex(newIndex)
+    if (wasPlaying) {
+      audio
+        .play()
+        .then(() => setIsPlaying(true))
         .catch(() => {})
     }
   }
@@ -149,13 +173,14 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
   }
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0
+  const track = TRACKS[trackIndex]
 
   return (
     <Frame>
       <div className="flex flex-col w-60 gap-1 p-4">
         <div>
-          <p className="text-lg font-medium text-dark-brown truncate text-center">Falling Into The Sky</p>
-          <p className="text-sm text-brown text-center -mt-1">Kale Wu</p>
+          <p className="text-lg font-medium text-dark-brown truncate text-center">{track.title}</p>
+          <p className="text-sm text-brown text-center -mt-1">{track.artist}</p>
         </div>
 
         <div className="flex flex-col gap-0.5">
@@ -210,6 +235,22 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
 
           <button
             type="button"
+            onClick={() => switchTrack((trackIndex - 1 + TRACKS.length) % TRACKS.length)}
+            className="cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
+            aria-label="Previous track"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-4 h-4 text-dark-brown"
+            >
+              <path d="M9.195 18.44c1.25.714 2.805-.189 2.805-1.629v-2.34l6.945 3.968c1.25.715 2.805-.188 2.805-1.628V6.19c0-1.44-1.555-2.343-2.805-1.628L12 8.53V6.19c0-1.44-1.554-2.343-2.805-1.628l-7.108 4.061c-1.26.72-1.26 2.536 0 3.256l7.108 4.061Z" />
+            </svg>
+          </button>
+
+          <button
+            type="button"
             onClick={toggle}
             className="cursor-pointer opacity-80 hover:opacity-100 transition-opacity"
             aria-label={isPlaying ? 'Pause' : 'Play'}
@@ -241,6 +282,22 @@ export default function BgmPlayer({ hasProjects = false }: { hasProjects?: boole
                 />
               </svg>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => switchTrack((trackIndex + 1) % TRACKS.length)}
+            className="cursor-pointer opacity-70 hover:opacity-100 transition-opacity"
+            aria-label="Next track"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="w-4 h-4 text-dark-brown"
+            >
+              <path d="M5.055 7.06C3.805 6.347 2.25 7.25 2.25 8.69v8.122c0 1.44 1.555 2.343 2.805 1.628L12 14.47v2.34c0 1.44 1.555 2.343 2.805 1.628l7.108-4.061c1.26-.72 1.26-2.536 0-3.256l-7.108-4.061C13.555 6.346 12 7.249 12 8.689v2.34L5.055 7.061Z" />
+            </svg>
           </button>
 
           <input
