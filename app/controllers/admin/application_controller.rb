@@ -4,10 +4,10 @@ class Admin::ApplicationController < ApplicationController
   private
 
   def require_staff!
-    raise ActionController::RoutingError, "Not Found" unless current_user&.staff?
+    redirect_to main_app.root_path, alert: "You are not authorized to access this page." unless current_user&.staff?
   end
 
   def require_admin!
-    raise ActionController::RoutingError, "Not Found" unless current_user&.admin?
+    redirect_to main_app.root_path, alert: "You are not authorized to access this page." unless current_user&.admin?
   end
 end
