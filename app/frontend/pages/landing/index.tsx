@@ -433,11 +433,6 @@ export default function LandingIndex() {
         </Frame>
       </div>
       <div className="bg-[#41D2FF] relative z-10 px-2 md:px-8 lg:px-18 xl:px-36 2xl:px-54  bg-red flex items-end p-4">
-        <div className="text-blue text-4xl bg-light-blue/40 py-2 px-4 w-fit rounded-xl font-semibold mt-auto group cursor-default transition-all flex ">
-          <span className="">春</span>
-          <span className="">天</span>
-        </div>
-        <p></p>
         <div className="w-60 lg:w-80 -mb-10 ml-auto flex flex-col items-center justify-center text-center">
           <div className={`relative bg-beige h-auto w-auto p-3 sm:px-6 sm:py-4 rounded-2xl `}>
             <span className="relative z-1 text-base lg:text-lg text-brown text-center font-medium">
