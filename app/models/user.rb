@@ -268,7 +268,13 @@ class User < ApplicationRecord
       "ID" => :id,
       "Email" => :email,
       "Display Name" => :display_name,
-      "Country" => ->(u) { u.latest_locatable_visit&.country },
+      "First Name" => ->(u) { u.hca_identity&.dig("first_name") },
+      "Last Name" => ->(u) { u.hca_identity&.dig("last_name") },
+      "Country" => ->(u) {
+        u.hca_identity&.dig("addresses")&.find { |a| a["primary"] }&.dig("country") ||
+          u.latest_locatable_visit&.country
+      },
+      "First Project Created At" => ->(u) { u.projects.kept.minimum(:created_at)&.iso8601 },
       "Created At" => ->(u) { u.created_at&.iso8601 },
       "Email Verified" => ->(u) { !u.trial? }
     }
@@ -293,6 +299,12 @@ class User < ApplicationRecord
     end
 
     get_timelapses_via_program_key
+  end
+
+  def hca_identity
+    return nil if hca_token.blank?
+
+    @hca_identity ||= HcaService.me(hca_token)&.dig("identity")
   end
 
   private
