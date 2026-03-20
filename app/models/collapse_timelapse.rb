@@ -3,7 +3,6 @@
 # Table name: collapse_timelapses
 #
 #  id                  :bigint           not null, primary key
-#  collapse_session_id :string           not null
 #  last_refreshed_at   :datetime
 #  name                :string
 #  screenshot_count    :integer
@@ -14,6 +13,7 @@
 #  video_url           :string
 #  created_at          :datetime         not null
 #  updated_at          :datetime         not null
+#  collapse_session_id :string           not null
 #  user_id             :bigint           not null
 #
 # Indexes
