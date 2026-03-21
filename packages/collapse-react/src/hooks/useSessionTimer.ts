@@ -14,10 +14,20 @@ export function useSessionTimer(
 ): number {
   const [displaySeconds, setDisplaySeconds] = useState(serverTrackedSeconds);
   const lastSyncRef = useRef(Date.now());
-
+  // Base value the RAF tick counts from. Ratchets up so display never jumps backward.
+  const baseRef = useRef(serverTrackedSeconds);
   useEffect(() => {
-    setDisplaySeconds(serverTrackedSeconds);
-    lastSyncRef.current = Date.now();
+    // Compute where the display is right now (base + elapsed since last sync).
+    const currentDisplay = baseRef.current + Math.floor((Date.now() - lastSyncRef.current) / 1000);
+
+    // Always ratchet up: display should never be behind the server value.
+    // display ≥ server is the invariant — the user earned that time.
+    const newBase = Math.max(currentDisplay, serverTrackedSeconds);
+    if (newBase !== baseRef.current) {
+      baseRef.current = newBase;
+      setDisplaySeconds(newBase);
+      lastSyncRef.current = Date.now();
+    }
   }, [serverTrackedSeconds]);
 
   useEffect(() => {
@@ -28,7 +38,7 @@ export function useSessionTimer(
       const elapsed = Math.floor((Date.now() - lastSyncRef.current) / 1000);
       if (elapsed !== lastRenderedSecond) {
         lastRenderedSecond = elapsed;
-        setDisplaySeconds(serverTrackedSeconds + elapsed);
+        setDisplaySeconds(baseRef.current + elapsed);
       }
       raf = requestAnimationFrame(tick);
     };

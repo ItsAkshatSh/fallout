@@ -11,7 +11,7 @@ set -euo pipefail
 #   bin/update-collapse main     # install from branch (for development)
 
 REPO="hackclub/collapse"
-PINNED_VERSION="v0.0.12"
+PINNED_VERSION="v0.0.16"
 REF="${1:-$PINNED_VERSION}"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGES_DIR="$ROOT_DIR/packages"

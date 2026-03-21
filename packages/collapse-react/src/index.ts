@@ -12,6 +12,10 @@ export { RecordingControls } from "./components/RecordingControls.js";
 export type { RecordingControlsProps } from "./components/RecordingControls.js";
 export { ScreenPreview } from "./components/ScreenPreview.js";
 export type { ScreenPreviewProps } from "./components/ScreenPreview.js";
+export { CameraSelector } from "./components/CameraSelector.js";
+export type { CameraSelectorProps } from "./components/CameraSelector.js";
+export { CameraPreview } from "./components/CameraPreview.js";
+export type { CameraPreviewProps } from "./components/CameraPreview.js";
 export { ResultView } from "./components/ResultView.js";
 export type { ResultViewProps } from "./components/ResultView.js";
 export { ProcessingState } from "./components/ProcessingState.js";
@@ -28,6 +32,7 @@ export type { SessionDetailProps } from "./components/SessionDetail.js";
 // Headless hooks
 export { useCollapse } from "./hooks/useCollapse.js";
 export { useScreenCapture } from "./hooks/useScreenCapture.js";
+export { useCameraCapture } from "./hooks/useCameraCapture.js";
 export { useUploader } from "./hooks/useUploader.js";
 export { useSession } from "./hooks/useSession.js";
 export { useSessionTimer, formatTime, formatTrackedTime } from "./hooks/useSessionTimer.js";
@@ -51,6 +56,8 @@ export type {
   CollapseActions,
   CollapseCallbacks,
   CaptureSettings,
+  CaptureMode,
+  CameraSettings,
   RetrySettings,
   UploadState,
   CaptureResult,

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { router } from '@inertiajs/react'
-import { CollapseProvider, useCollapse } from '@collapse/react'
+import { CollapseProvider, useCollapse, formatTime } from '@collapse/react'
+import type { CollapseCallbacks } from '@collapse/react'
 import Button from '@/components/shared/Button'
 import Input from '@/components/shared/Input'
 
@@ -10,13 +11,24 @@ type CollapseSessionProps = {
   status: string
 }
 
-function formatDuration(seconds: number): string {
-  const hrs = Math.floor(seconds / 3600)
-  const mins = Math.floor((seconds % 3600) / 60)
-  const secs = Math.round(seconds % 60)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  if (hrs > 0) return `${hrs}:${pad(mins)}:${pad(secs)}`
-  return `${mins}:${pad(secs)}`
+function log(ns: string, ...args: unknown[]) {
+  console.log(`[collapse:${ns}]`, ...args)
+}
+
+const collapseCallbacks: CollapseCallbacks = {
+  onShareStart: () => log('capture', 'screen sharing started'),
+  onShareStop: () => log('capture', 'screen sharing stopped'),
+  onCapture: (capture) => log('capture', `screenshot captured (${capture.width}x${capture.height})`),
+  onUploadSuccess: ({ screenshotId, trackedSeconds }) =>
+    log('upload', `screenshot ${screenshotId} confirmed, tracked: ${formatTime(trackedSeconds)}`),
+  onUploadFailure: (error) => log('upload', `FAILED: ${error.message}`),
+  onPause: ({ totalActiveSeconds }) => log('session', `paused (active: ${formatTime(totalActiveSeconds)})`),
+  onResume: () => log('session', 'resumed'),
+  onStop: ({ trackedSeconds }) => log('session', `stopped, tracked: ${formatTime(trackedSeconds)}`),
+  onComplete: ({ videoUrl }) => log('session', `complete, video: ${videoUrl}`),
+  onCompilationFailed: () => log('session', 'compilation FAILED'),
+  onError: (error, context) => log('session', `error in ${context}: ${error.message}`),
+  onStatusChange: (prev, next) => log('session', `status: ${prev} → ${next}`),
 }
 
 function CollapseSessionShow({
@@ -28,7 +40,16 @@ function CollapseSessionShow({
   collapse_api_url: string | null
   return_to: string | null
 }) {
-  const [mode, setMode] = useState<'choose' | 'browser' | 'desktop'>('choose')
+  const endedStatuses = ['stopped', 'compiling', 'complete', 'failed']
+  const [mode, setMode] = useState<'choose' | 'browser' | 'camera' | 'desktop'>(() => {
+    log(
+      'session',
+      `loaded session id=${collapse_session.id}, status=${collapse_session.status}, api=${collapse_api_url}`,
+    )
+    // Skip mode selection if session already ended — go straight to result view
+    if (endedStatuses.includes(collapse_session.status)) return 'browser'
+    return 'choose'
+  })
 
   return (
     <div className="min-h-screen bg-light-brown flex items-center justify-center p-6">
@@ -38,10 +59,10 @@ function CollapseSessionShow({
             <div className="p-6 border-b border-dark-brown flex items-center justify-between">
               <h1 className="font-bold text-2xl uppercase tracking-wide text-dark-brown">Collapse Recording</h1>
               <a
-                href={return_to || '/journal_entries/new'}
+                href={return_to || '/path'}
                 className="text-dark-brown text-sm underline hover:no-underline"
               >
-                Back to Journal
+                Back to Path
               </a>
             </div>
             <div className="flex flex-col items-center gap-6 p-12">
@@ -49,7 +70,10 @@ function CollapseSessionShow({
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setMode('browser')}
+                  onClick={() => {
+                    log('session', 'mode: browser')
+                    setMode('browser')
+                  }}
                   className="flex flex-col items-center gap-3 p-6 border-2 border-dark-brown rounded-lg cursor-pointer hover:bg-light-brown transition-colors"
                 >
                   <svg
@@ -66,11 +90,36 @@ function CollapseSessionShow({
                     />
                   </svg>
                   <span className="font-bold text-dark-brown uppercase">Browser</span>
-                  <span className="text-dark-brown text-xs">Record in this tab</span>
+                  <span className="text-dark-brown text-xs">Share your screen</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => {
+                    log('session', 'mode: camera')
+                    setMode('camera')
+                  }}
+                  className="flex flex-col items-center gap-3 p-6 border-2 border-dark-brown rounded-lg cursor-pointer hover:bg-light-brown transition-colors"
+                >
+                  <svg
+                    className="w-10 h-10 text-dark-brown"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.5}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
+                    />
+                  </svg>
+                  <span className="font-bold text-dark-brown uppercase">Camera</span>
+                  <span className="text-dark-brown text-xs">Use your webcam</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    log('session', 'mode: desktop, opening collapse:// deep link')
                     window.location.href = `collapse://session?token=${collapse_session.token}`
                     setMode('desktop')
                   }}
@@ -89,7 +138,7 @@ function CollapseSessionShow({
                       d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
                     />
                   </svg>
-                  <span className="font-bold text-dark-brown uppercase">Desktop App</span>
+                  <span className="font-bold text-dark-brown uppercase">Desktop</span>
                   <span className="text-dark-brown text-xs">Open in Collapse app</span>
                 </button>
               </div>
@@ -97,8 +146,13 @@ function CollapseSessionShow({
           </>
         )}
 
-        {mode === 'browser' && (
-          <CollapseProvider token={collapse_session.token} apiBaseUrl={collapse_api_url ?? ''}>
+        {(mode === 'browser' || mode === 'camera') && (
+          <CollapseProvider
+            token={collapse_session.token}
+            apiBaseUrl={collapse_api_url ?? ''}
+            callbacks={collapseCallbacks}
+            capture={mode === 'camera' ? { mode: 'camera' } : undefined}
+          >
             <BrowserRecorderUI collapseSessionId={collapse_session.id} returnTo={return_to} />
           </CollapseProvider>
         )}
@@ -111,15 +165,14 @@ function CollapseSessionShow({
 
 function RecordingHeader({
   status,
-  isSharing,
+  isRecording,
   returnTo,
 }: {
   status: string
-  isSharing: boolean
+  isRecording: boolean
   returnTo: string | null
 }) {
-  const isRecording = isSharing && (status === 'active' || status === 'pending')
-  const isPaused = status === 'paused' || (status === 'active' && !isSharing)
+  const isPaused = status === 'paused' || (status === 'active' && !isRecording)
   const canLeave = !isRecording && !isPaused && status !== 'compiling'
 
   return (
@@ -132,8 +185,8 @@ function RecordingHeader({
         </h1>
       </div>
       {canLeave && (
-        <a href={returnTo || '/journal_entries/new'} className="text-dark-brown text-sm underline hover:no-underline">
-          Back to Journal
+        <a href={returnTo || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
+          Back to Path
         </a>
       )}
     </div>
@@ -143,7 +196,7 @@ function RecordingHeader({
 function StatusBar({ displaySeconds, screenshotCount }: { displaySeconds: number; screenshotCount: number }) {
   return (
     <div className="flex items-center justify-between px-6 py-3 bg-light-brown border-b border-dark-brown">
-      <p className="text-dark-brown font-bold text-3xl font-mono tabular-nums">{formatDuration(displaySeconds)}</p>
+      <p className="text-dark-brown font-bold text-3xl font-mono tabular-nums">{formatTime(displaySeconds)}</p>
       <p className="text-dark-brown text-sm">
         {screenshotCount} screenshot{screenshotCount !== 1 ? 's' : ''}
       </p>
@@ -157,29 +210,44 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
   const [stopping, setStopping] = useState(false)
   const [name, setName] = useState('')
 
-  // SDK keeps status 'pending' until first screenshot uploads; use isSharing to detect active recording
-  const isCapturing = state.isSharing && (state.status === 'active' || state.status === 'pending')
-  const isRecordingOrPaused = isCapturing || state.status === 'paused'
+  const isCamera = state.captureMode === 'camera'
+  const showStatusBar = state.isRecording || state.status === 'paused'
+  const [captureFailed, setCaptureFailed] = useState(false)
 
-  // Auto-pause when tab is hidden (Safari kills the stream; Chrome throttles timers)
+  // Auto-start camera preview whenever we need the user to confirm before recording
   useEffect(() => {
-    if (!isCapturing) return
-    function handleVisibilityChange() {
-      if (document.hidden) {
-        actions.stopSharing()
-        actions.pause()
-        document.title = `Paused in Background (${formatDuration(state.displaySeconds)})`
-      }
+    if (isCamera && !state.isPreviewing && !state.isSharing) {
+      actions.startPreview()
     }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [isCapturing, actions.pause, actions.stopSharing, state.displaySeconds])
+  }, [isCamera, state.status, state.isPreviewing, state.isSharing])
 
+  // Detect capture failure: 2 minutes sharing with no screenshot
   useEffect(() => {
-    if (isCapturing) {
-      document.title = `Recording: ${formatDuration(state.displaySeconds)}`
+    if (!state.isSharing || state.lastScreenshotUrl) return
+    const timeout = setTimeout(() => {
+      if (!state.lastScreenshotUrl) {
+        log('capture', 'no screenshot after 2 minutes, marking capture as failed')
+        setCaptureFailed(true)
+      }
+    }, 120_000)
+    return () => clearTimeout(timeout)
+  }, [state.isSharing, state.lastScreenshotUrl])
+
+  // Also detect SDK-level capture errors
+  useEffect(() => {
+    if (state.status === 'error') setCaptureFailed(true)
+  }, [state.status])
+
+  // Tab title
+  useEffect(() => {
+    if (captureFailed) {
+      document.title = 'Capture Failed'
+    } else if (state.isRecording && document.hidden) {
+      document.title = `Recording in Background (${formatTime(state.displaySeconds)})`
+    } else if (state.isRecording) {
+      document.title = `Recording: ${formatTime(state.displaySeconds)}`
     } else if (state.status === 'paused') {
-      document.title = `Paused: ${formatDuration(state.displaySeconds)}`
+      document.title = `Paused: ${formatTime(state.displaySeconds)}`
     } else if (state.status === 'compiling') {
       document.title = 'Compiling timelapse...'
     } else if (state.status === 'complete' || state.status === 'stopped') {
@@ -187,11 +255,12 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
     } else {
       document.title = 'Collapse Recording'
     }
-  }, [state.status, state.isSharing, state.displaySeconds, isCapturing])
+  }, [captureFailed, state.status, state.isRecording, state.displaySeconds])
 
+  // Sync status to Rails when recording ends
   useEffect(() => {
+    if (state.status === 'complete') setFinished(true)
     if (state.status === 'complete' || state.status === 'stopped') {
-      setFinished(true)
       setStopping(false)
       const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content
       fetch(`/collapse_sessions/${collapseSessionId}`, {
@@ -200,18 +269,22 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
           Accept: 'application/json',
           ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         },
-      }).catch(() => {})
+      })
+        .then(() => log('session', 'status synced to Rails'))
+        .catch((e) => log('session', 'sync to Rails FAILED:', e))
     }
   }, [state.status, collapseSessionId])
 
   async function handleStop() {
-    await actions.stop({ name: name.trim() || undefined })
+    const n = name.trim() || undefined
+    log('session', `stopping${n ? `, name: "${n}"` : ''}`)
+    await actions.stop({ name: n })
   }
 
   if (state.status === 'loading') {
     return (
       <>
-        <RecordingHeader status={state.status} isSharing={state.isSharing} returnTo={returnTo} />
+        <RecordingHeader status={state.status} isRecording={false} returnTo={returnTo} />
         <div className="flex items-center justify-center p-12">
           <div className="w-8 h-8 border-4 border-dark-brown border-t-transparent rounded-full animate-spin" />
         </div>
@@ -219,22 +292,25 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
     )
   }
 
-  if (state.status === 'error') {
+  if (captureFailed || state.status === 'error') {
     return (
       <>
-        <RecordingHeader status={state.status} isSharing={state.isSharing} returnTo={returnTo} />
-        <div className="flex flex-col items-center gap-3 p-12">
-          <p className="text-red-500 font-bold">Something went wrong</p>
-          <p className="text-red-500 text-sm">{state.error || 'An unexpected error occurred'}</p>
+        <RecordingHeader status={state.status} isRecording={false} returnTo={returnTo} />
+        <div className="flex flex-col items-center gap-4 p-12">
+          <p className="text-red-700 font-bold text-xl">Capture failed</p>
+          <p className="text-dark-brown text-sm">Everything before the failure was saved. Try reloading the page.</p>
+          <Button onClick={() => window.location.reload()} className="py-2 px-6 mt-2">
+            Reload
+          </Button>
         </div>
       </>
     )
   }
 
-  if (state.status === 'compiling') {
+  if (state.status === 'stopped' || state.status === 'compiling') {
     return (
       <>
-        <RecordingHeader status={state.status} isSharing={state.isSharing} returnTo={returnTo} />
+        <RecordingHeader status={state.status} isRecording={false} returnTo={returnTo} />
         <StatusBar displaySeconds={state.trackedSeconds} screenshotCount={state.screenshotCount} />
         <div className="flex flex-col items-center gap-4 p-12">
           <div className="w-10 h-10 border-4 border-dark-brown border-t-transparent rounded-full animate-spin" />
@@ -247,15 +323,15 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
   if (finished) {
     return (
       <>
-        <RecordingHeader status={state.status} isSharing={state.isSharing} returnTo={returnTo} />
+        <RecordingHeader status={state.status} isRecording={false} returnTo={returnTo} />
         <StatusBar displaySeconds={state.trackedSeconds} screenshotCount={state.screenshotCount} />
         <div className="flex flex-col items-center gap-4 p-8">
           <p className="text-dark-brown font-bold text-xl">Recording complete</p>
           {state.videoUrl && (
             <video src={state.videoUrl} controls className="w-full max-w-lg rounded border border-dark-brown" />
           )}
-          <Button onClick={() => router.visit(returnTo || '/journal_entries/new')} className="py-2 px-6 text-lg mt-2">
-            Back to Journal
+          <Button onClick={() => router.visit(returnTo || '/path')} className="py-2 px-6 text-lg mt-2">
+            Back to Path
           </Button>
         </div>
       </>
@@ -264,31 +340,51 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
 
   return (
     <>
-      <RecordingHeader status={state.status} isSharing={state.isSharing} returnTo={returnTo} />
-      {isRecordingOrPaused && (
-        <StatusBar displaySeconds={state.displaySeconds} screenshotCount={state.screenshotCount} />
-      )}
+      <RecordingHeader status={state.status} isRecording={state.isRecording} returnTo={returnTo} />
+      {showStatusBar && <StatusBar displaySeconds={state.displaySeconds} screenshotCount={state.screenshotCount} />}
 
       <div className="flex flex-col gap-6 p-6">
-        {state.lastScreenshotUrl && (
+        {isCamera && state.isPreviewing && state.previewStream ? (
+          <CameraPreviewVideo stream={state.previewStream} />
+        ) : state.lastScreenshotUrl ? (
           <div className="relative aspect-video rounded-lg overflow-hidden bg-light-brown border border-dark-brown">
             <img src={state.lastScreenshotUrl} alt="Latest capture" className="w-full h-full object-contain" />
             <span className="absolute bottom-2 right-2 text-xs bg-dark-brown/80 text-light-brown px-2 py-0.5 rounded">
               Latest capture
             </span>
           </div>
-        )}
-
-        {!state.lastScreenshotUrl && (
+        ) : (
           <div className="aspect-video rounded-lg overflow-hidden bg-light-brown border border-dark-brown flex flex-col items-center justify-center gap-3">
             {state.isSharing ? (
               <>
                 <div className="w-6 h-6 border-3 border-dark-brown border-t-transparent rounded-full animate-spin" />
-                <p className="text-dark-brown text-sm">Capturing screen. This should only take a few seconds.</p>
+                <p className="text-dark-brown text-sm">Capturing picture. This should only take a few seconds.</p>
               </>
             ) : (
-              <p className="text-dark-brown text-lg">Share your screen to begin recording</p>
+              <p className="text-dark-brown text-lg">
+                {isCamera ? 'Start your camera to begin recording' : 'Share your screen to begin recording'}
+              </p>
             )}
+          </div>
+        )}
+
+        {isCamera && state.availableCameras.length > 1 && state.isPreviewing && (
+          <div className="flex items-center gap-3">
+            <label htmlFor="camera-select" className="text-dark-brown text-sm font-bold">
+              Camera:
+            </label>
+            <select
+              id="camera-select"
+              value={state.selectedCameraId ?? ''}
+              onChange={(e) => actions.selectCamera(e.target.value)}
+              className="flex-1 border-2 border-dark-brown rounded px-3 py-1.5 text-sm bg-white text-dark-brown"
+            >
+              {state.availableCameras.map((device) => (
+                <option key={device.deviceId} value={device.deviceId}>
+                  {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                </option>
+              ))}
+            </select>
           </div>
         )}
 
@@ -322,24 +418,35 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
           </div>
         ) : (
           <div className="flex gap-3 justify-center">
-            {!state.isSharing && state.status === 'pending' && (
-              <Button onClick={actions.startSharing} className="py-2 px-6">
-                Share Screen & Start
-              </Button>
+            {isCamera ? (
+              <>
+                {state.isPreviewing && !state.isRecording && (
+                  <Button onClick={actions.startSharing} className="py-2 px-6">
+                    Start Recording
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                {!state.isSharing && state.status === 'pending' && (
+                  <Button onClick={actions.startSharing} className="py-2 px-6">
+                    Share & Start
+                  </Button>
+                )}
+                {!state.isSharing && (state.status === 'active' || state.status === 'paused') && (
+                  <Button onClick={actions.startSharing} className="py-2 px-6">
+                    Share & Resume
+                  </Button>
+                )}
+              </>
             )}
-            {isCapturing && (
-              <Button
-                onClick={async () => {
-                  actions.stopSharing()
-                  await actions.pause()
-                }}
-                className="py-2 px-6"
-              >
+            {state.isRecording && (
+              <Button onClick={actions.pause} className="py-2 px-6">
                 Pause
               </Button>
             )}
-            {!state.isSharing && (state.status === 'active' || state.status === 'paused') && (
-              <Button onClick={actions.startSharing} className="py-2 px-6">
+            {state.status === 'paused' && state.isSharing && (
+              <Button onClick={actions.resume} className="py-2 px-6">
                 Resume
               </Button>
             )}
@@ -359,13 +466,36 @@ function BrowserRecorderUI({ collapseSessionId, returnTo }: { collapseSessionId:
   )
 }
 
+function CameraPreviewVideo({ stream }: { stream: MediaStream }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream
+    }
+  }, [stream])
+
+  return (
+    <div className="relative aspect-video rounded-lg overflow-hidden bg-light-brown border border-dark-brown">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className="w-full h-full object-cover"
+        style={{ transform: 'scaleX(-1)' }}
+      />
+    </div>
+  )
+}
+
 function DesktopModeUI({ token, returnTo }: { token: string; returnTo: string | null }) {
   return (
     <>
       <div className="p-6 border-b border-dark-brown flex items-center justify-between">
         <h1 className="font-bold text-2xl uppercase tracking-wide text-dark-brown">Desktop Recording</h1>
-        <a href={returnTo || '/journal_entries/new'} className="text-dark-brown text-sm underline hover:no-underline">
-          Back to Journal
+        <a href={returnTo || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
+          Back to Path
         </a>
       </div>
       <div className="flex flex-col items-center gap-4 p-12">
@@ -382,8 +512,8 @@ function DesktopModeUI({ token, returnTo }: { token: string; returnTo: string | 
           >
             Re-open Desktop App
           </a>
-          <Button onClick={() => router.visit(returnTo || '/journal_entries/new')} className="py-2 px-6">
-            Back to Journal
+          <Button onClick={() => router.visit(returnTo || '/path')} className="py-2 px-6">
+            Back to Path
           </Button>
         </div>
       </div>

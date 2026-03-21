@@ -1,7 +1,8 @@
 import { createContext, useMemo, useEffect, useRef, useState, useCallback, useContext } from 'react';
-import { CANVAS_TO_BLOB_TIMEOUT_MS, MAX_PENDING_BUFFER, UPLOAD_RETRY_DELAYS_MS, MAX_UPLOAD_RETRIES, MAX_HEIGHT, MAX_WIDTH, JPEG_QUALITY, SCREENSHOT_INTERVAL_MS, VIDEO_READY_TIMEOUT_MS } from '@collapse/shared';
+import { VIDEO_READY_TIMEOUT_MS, MAX_PENDING_BUFFER, UPLOAD_RETRY_DELAYS_MS, MAX_UPLOAD_RETRIES, MAX_HEIGHT, MAX_WIDTH, JPEG_QUALITY, SCREENSHOT_INTERVAL_MS, CANVAS_TO_BLOB_TIMEOUT_MS } from '@collapse/shared';
 export { SESSION_STATUSES } from '@collapse/shared';
 import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+import { motion } from 'motion/react';
 
 // src/CollapseProvider.tsx
 
@@ -123,7 +124,12 @@ function resolveConfig(config) {
       jpegQuality: config.capture?.jpegQuality ?? JPEG_QUALITY,
       maxWidth: config.capture?.maxWidth ?? MAX_WIDTH,
       maxHeight: config.capture?.maxHeight ?? MAX_HEIGHT,
-      displayMediaConstraints: config.capture?.displayMediaConstraints
+      displayMediaConstraints: config.capture?.displayMediaConstraints,
+      mode: config.capture?.mode ?? "screen",
+      camera: {
+        deviceId: config.capture?.camera?.deviceId,
+        userMediaConstraints: config.capture?.camera?.userMediaConstraints
+      }
     },
     retry: {
       maxRetries: config.retry?.maxRetries ?? MAX_UPLOAD_RETRIES,
@@ -172,7 +178,7 @@ function CollapseProvider({
   }, []);
   return /* @__PURE__ */ jsx(CollapseContext.Provider, { value, children });
 }
-function waitForVideoReady(video, timeoutMs) {
+function waitForVideoReady(video, timeoutMs = VIDEO_READY_TIMEOUT_MS) {
   if (video.videoWidth > 0 && video.videoHeight > 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
@@ -184,6 +190,40 @@ function waitForVideoReady(video, timeoutMs) {
     })();
   });
 }
+function captureFrameAsJpeg(video, canvas, settings) {
+  if (video.videoWidth === 0 || video.videoHeight === 0) {
+    return Promise.resolve(null);
+  }
+  const scale = Math.min(
+    settings.maxWidth / video.videoWidth,
+    settings.maxHeight / video.videoHeight,
+    1
+  );
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    return Promise.resolve(null);
+  }
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const toBlobPromise = new Promise((resolve) => {
+    canvas.toBlob(
+      (blob) => {
+        resolve(
+          blob ? { blob, width: canvas.width, height: canvas.height } : null
+        );
+      },
+      "image/jpeg",
+      settings.jpegQuality
+    );
+  });
+  const timeoutPromise = new Promise(
+    (resolve) => setTimeout(() => resolve(null), CANVAS_TO_BLOB_TIMEOUT_MS)
+  );
+  return Promise.race([toBlobPromise, timeoutPromise]);
+}
+
+// src/hooks/useScreenCapture.ts
 function useScreenCapture(overrides) {
   let settings;
   try {
@@ -237,7 +277,7 @@ function useScreenCapture(overrides) {
     video.muted = true;
     video.playsInline = true;
     await video.play();
-    await waitForVideoReady(video, VIDEO_READY_TIMEOUT_MS);
+    await waitForVideoReady(video);
     videoRef.current = video;
     if (!canvasRef.current) {
       canvasRef.current = document.createElement("canvas");
@@ -255,36 +295,7 @@ function useScreenCapture(overrides) {
     if (!video || !canvas || !streamRef.current) {
       return Promise.resolve(null);
     }
-    if (video.videoWidth === 0 || video.videoHeight === 0) {
-      return Promise.resolve(null);
-    }
-    const scale = Math.min(
-      s.maxWidth / video.videoWidth,
-      s.maxHeight / video.videoHeight,
-      1
-    );
-    canvas.width = Math.round(video.videoWidth * scale);
-    canvas.height = Math.round(video.videoHeight * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) {
-      return Promise.resolve(null);
-    }
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const toBlobPromise = new Promise((resolve) => {
-      canvas.toBlob(
-        (blob) => {
-          resolve(
-            blob ? { blob, width: canvas.width, height: canvas.height } : null
-          );
-        },
-        "image/jpeg",
-        s.jpegQuality
-      );
-    });
-    const timeoutPromise = new Promise(
-      (resolve) => setTimeout(() => resolve(null), CANVAS_TO_BLOB_TIMEOUT_MS)
-    );
-    return Promise.race([toBlobPromise, timeoutPromise]);
+    return captureFrameAsJpeg(video, canvas, s);
   }, []);
   const stopSharing = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -292,6 +303,177 @@ function useScreenCapture(overrides) {
     setIsSharing(false);
   }, []);
   return { isSharing, startSharing, takeScreenshot, stopSharing };
+}
+function useCameraCapture(overrides) {
+  let settings;
+  try {
+    const { config } = useCollapseContext();
+    settings = {
+      maxWidth: overrides?.maxWidth ?? config.capture.maxWidth,
+      maxHeight: overrides?.maxHeight ?? config.capture.maxHeight,
+      jpegQuality: overrides?.jpegQuality ?? config.capture.jpegQuality,
+      deviceId: overrides?.camera?.deviceId ?? config.capture.camera.deviceId,
+      userMediaConstraints: overrides?.camera?.userMediaConstraints ?? config.capture.camera.userMediaConstraints
+    };
+  } catch {
+    settings = {
+      maxWidth: overrides?.maxWidth ?? 1920,
+      maxHeight: overrides?.maxHeight ?? 1080,
+      jpegQuality: overrides?.jpegQuality ?? 0.85,
+      deviceId: overrides?.camera?.deviceId,
+      userMediaConstraints: overrides?.camera?.userMediaConstraints
+    };
+  }
+  const streamRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [previewStream, setPreviewStream] = useState(null);
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState(
+    settings.deviceId ?? null
+  );
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const enumerateDevices = useCallback(async () => {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      const cameras = all.filter((d) => d.kind === "videoinput");
+      setDevices(cameras);
+      return cameras;
+    } catch {
+      return [];
+    }
+  }, []);
+  useEffect(() => {
+    enumerateDevices();
+    const handler = () => enumerateDevices();
+    navigator.mediaDevices.addEventListener("devicechange", handler);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", handler);
+  }, [enumerateDevices]);
+  const acquireStream = useCallback(
+    async (deviceIdOverride) => {
+      const s = settingsRef.current;
+      const videoConstraints = {
+        width: { ideal: s.maxWidth, max: s.maxWidth },
+        height: { ideal: s.maxHeight, max: s.maxHeight },
+        ...s.userMediaConstraints
+      };
+      const devId = deviceIdOverride ?? selectedDeviceId ?? s.deviceId;
+      if (devId) {
+        videoConstraints.deviceId = { exact: devId };
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: videoConstraints,
+        audio: false
+      });
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = stream;
+      setPreviewStream(stream);
+      const video = document.createElement("video");
+      video.srcObject = stream;
+      video.muted = true;
+      video.playsInline = true;
+      await video.play();
+      await waitForVideoReady(video);
+      videoRef.current = video;
+      if (!canvasRef.current) {
+        canvasRef.current = document.createElement("canvas");
+      }
+      const handleEnded = () => {
+        streamRef.current = null;
+        setPreviewStream(null);
+        setIsPreviewing(false);
+        setIsSharing(false);
+      };
+      stream.getVideoTracks()[0].addEventListener("ended", handleEnded);
+      enumerateDevices();
+      return stream;
+    },
+    [selectedDeviceId, enumerateDevices]
+  );
+  const startPreview = useCallback(async () => {
+    await acquireStream();
+    setIsPreviewing(true);
+    setIsSharing(false);
+  }, [acquireStream]);
+  const stopPreview = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setPreviewStream(null);
+    videoRef.current = null;
+    setIsPreviewing(false);
+    setIsSharing(false);
+  }, []);
+  const startSharing = useCallback(async () => {
+    if (!streamRef.current) {
+      await acquireStream();
+    }
+    setIsPreviewing(false);
+    setIsSharing(true);
+  }, [acquireStream]);
+  const takeScreenshot = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const s = settingsRef.current;
+    if (!video || !canvas || !streamRef.current) {
+      return Promise.resolve(null);
+    }
+    return captureFrameAsJpeg(video, canvas, s);
+  }, []);
+  const stopSharing = useCallback(() => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setPreviewStream(null);
+    videoRef.current = null;
+    setIsPreviewing(false);
+    setIsSharing(false);
+  }, []);
+  const selectDevice = useCallback(
+    async (deviceId) => {
+      setSelectedDeviceId(deviceId);
+      if (streamRef.current) {
+        const wasSharing = isSharing;
+        try {
+          await acquireStream(deviceId);
+          if (wasSharing) {
+            setIsPreviewing(false);
+            setIsSharing(true);
+          } else {
+            setIsPreviewing(true);
+            setIsSharing(false);
+          }
+        } catch {
+          streamRef.current = null;
+          setPreviewStream(null);
+          setIsPreviewing(false);
+          setIsSharing(false);
+        }
+      }
+    },
+    [isSharing, acquireStream]
+  );
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+  return {
+    isSharing,
+    startSharing,
+    takeScreenshot,
+    stopSharing,
+    // Camera-specific:
+    devices,
+    selectedDeviceId,
+    selectDevice,
+    // Preview:
+    isPreviewing,
+    previewStream,
+    startPreview,
+    stopPreview
+  };
 }
 async function retry(fn, maxRetries, delays) {
   for (let i = 0; i < maxRetries; i++) {
@@ -353,6 +535,10 @@ function useUploader() {
           return URL.createObjectURL(capture.blob);
         });
         setUploads((s) => ({ ...s, completed: s.completed + 1 }));
+        config.callbacks.onUploadSuccess?.({
+          screenshotId,
+          trackedSeconds: result.trackedSeconds
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upload failed";
         setLastError(msg);
@@ -542,9 +728,15 @@ function useSession() {
 function useSessionTimer(serverTrackedSeconds, isActive) {
   const [displaySeconds, setDisplaySeconds] = useState(serverTrackedSeconds);
   const lastSyncRef = useRef(Date.now());
+  const baseRef = useRef(serverTrackedSeconds);
   useEffect(() => {
-    setDisplaySeconds(serverTrackedSeconds);
-    lastSyncRef.current = Date.now();
+    const currentDisplay = baseRef.current + Math.floor((Date.now() - lastSyncRef.current) / 1e3);
+    const newBase = Math.max(currentDisplay, serverTrackedSeconds);
+    if (newBase !== baseRef.current) {
+      baseRef.current = newBase;
+      setDisplaySeconds(newBase);
+      lastSyncRef.current = Date.now();
+    }
   }, [serverTrackedSeconds]);
   useEffect(() => {
     if (!isActive) return;
@@ -554,7 +746,7 @@ function useSessionTimer(serverTrackedSeconds, isActive) {
       const elapsed = Math.floor((Date.now() - lastSyncRef.current) / 1e3);
       if (elapsed !== lastRenderedSecond) {
         lastRenderedSecond = elapsed;
-        setDisplaySeconds(serverTrackedSeconds + elapsed);
+        setDisplaySeconds(baseRef.current + elapsed);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -583,24 +775,34 @@ function formatTrackedTime(totalSeconds) {
 
 // src/hooks/useCollapse.ts
 function useCollapse() {
-  const { config } = useCollapseContext();
+  const { config, client } = useCollapseContext();
   const callbacksRef = useRef(config.callbacks);
   callbacksRef.current = config.callbacks;
+  const captureMode = config.capture.mode;
   const session = useSession();
-  const capture = useScreenCapture();
+  const screenCapture = useScreenCapture();
+  const cameraCapture = useCameraCapture();
+  const capture = captureMode === "camera" ? cameraCapture : screenCapture;
   const uploader = useUploader();
-  const displaySeconds = useSessionTimer(
+  const intervalSeconds = Math.floor(config.capture.intervalMs / 1e3);
+  const localEstimate = uploader.uploads.completed >= 2 ? (uploader.uploads.completed - 1) * intervalSeconds : 0;
+  const bestTrackedSeconds = Math.max(
     session.trackedSeconds,
-    session.status === "active" && capture.isSharing
+    uploader.trackedSeconds,
+    localEstimate
+  );
+  const displaySeconds = useSessionTimer(
+    bestTrackedSeconds,
+    capture.isSharing && (session.status === "active" || session.status === "pending")
   );
   const intervalRef = useRef(null);
   const capturingRef = useRef(false);
   const prevStatusRef = useRef(session.status);
   useEffect(() => {
-    if (uploader.trackedSeconds > 0) {
-      session.updateTrackedSeconds(uploader.trackedSeconds);
+    if (bestTrackedSeconds > session.trackedSeconds) {
+      session.updateTrackedSeconds(bestTrackedSeconds);
     }
-  }, [uploader.trackedSeconds, session.updateTrackedSeconds]);
+  }, [bestTrackedSeconds, session.trackedSeconds, session.updateTrackedSeconds]);
   useEffect(() => {
     const prev = prevStatusRef.current;
     const next = session.status;
@@ -651,13 +853,15 @@ function useCollapse() {
     }
   }, [capture.isSharing, session.status, session.resume]);
   useEffect(() => {
-    if (!capture.isSharing && session.status === "active" && capturingRef.current) {
-      capturingRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    if (!capture.isSharing && session.status === "active") {
+      if (capturingRef.current) {
+        capturingRef.current = false;
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        callbacksRef.current.onShareStop?.();
       }
-      callbacksRef.current.onShareStop?.();
       session.pause().catch(() => {
       });
     }
@@ -675,17 +879,18 @@ function useCollapse() {
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       let message;
+      const isCamera = captureMode === "camera";
       if (e.name === "NotAllowedError") {
-        message = "Screen sharing permission was denied. Please try again and select a screen to share.";
+        message = isCamera ? "Camera permission was denied. Please allow camera access and try again." : "Screen sharing permission was denied. Please try again and select a screen to share.";
       } else if (e.name === "AbortError") {
-        message = "Screen sharing was cancelled.";
+        message = isCamera ? "Camera access was cancelled." : "Screen sharing was cancelled.";
       } else {
-        message = e.message || "Failed to start screen sharing.";
+        message = e.message || (isCamera ? "Failed to start camera." : "Failed to start screen sharing.");
       }
       callbacksRef.current.onError?.(new Error(message), "startSharing");
       session.setError(message);
     }
-  }, [capture.startSharing, session]);
+  }, [capture.startSharing, session, captureMode]);
   const stopSharing = useCallback(() => {
     capture.stopSharing();
     callbacksRef.current.onShareStop?.();
@@ -716,38 +921,145 @@ function useCollapse() {
       totalActiveSeconds: session.totalActiveSeconds
     });
   }, [session.stop, session.trackedSeconds, session.totalActiveSeconds, capture.stopSharing]);
+  const [videoUrl, setVideoUrl] = useState(null);
+  useEffect(() => {
+    if (session.status !== "complete") return;
+    let cancelled = false;
+    client.getVideo().then((data) => {
+      if (!cancelled) {
+        setVideoUrl(data.videoUrl);
+        callbacksRef.current.onComplete?.({ videoUrl: data.videoUrl });
+      }
+    }).catch(() => {
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session.status, client]);
+  const isRecording = capture.isSharing && (session.status === "active" || session.status === "pending");
   const state = {
     status: session.status,
     isSharing: capture.isSharing,
-    trackedSeconds: session.trackedSeconds,
+    isRecording,
+    trackedSeconds: bestTrackedSeconds,
     displaySeconds,
-    screenshotCount: session.screenshotCount,
+    screenshotCount: Math.max(session.screenshotCount, uploader.uploads.completed),
     uploads: uploader.uploads,
     lastScreenshotUrl: uploader.lastScreenshotUrl,
-    videoUrl: null,
-    error: session.error
+    videoUrl,
+    error: session.error,
+    captureMode,
+    availableCameras: cameraCapture.devices,
+    selectedCameraId: cameraCapture.selectedDeviceId,
+    isPreviewing: cameraCapture.isPreviewing,
+    previewStream: cameraCapture.previewStream
   };
   const actions = {
     startSharing,
     stopSharing,
     pause,
     resume,
-    stop
+    stop,
+    selectCamera: cameraCapture.selectDevice,
+    startPreview: cameraCapture.startPreview,
+    stopPreview: cameraCapture.stopPreview
   };
   return { state, actions };
 }
 
 // src/ui/theme.ts
+if (typeof document !== "undefined" && !document.querySelector("style[data-collapse-theme]")) {
+  const style = document.createElement("style");
+  style.setAttribute("data-collapse-theme", "");
+  style.textContent = `
+    :root {
+      /* Dark theme (default/fallback) */
+      --color-bg-body: #000000;
+      --color-bg-panel: #111111;
+      --color-modal-backdrop: rgba(0, 0, 0, 0.8);
+      --color-bg-surface: rgba(255, 255, 255, 0.05);
+      --color-bg-sunken: rgba(255, 255, 255, 0.02);
+      --color-text-primary: #ffffff;
+      --color-text-inverse: #000000;
+      --color-text-secondary: rgba(255, 255, 255, 0.6);
+      --color-text-tertiary: rgba(255, 255, 255, 0.4);
+      --color-text-quaternary: rgba(255, 255, 255, 0.2);
+      --color-text-error: #fca5a5;
+      --color-border-default: rgba(255, 255, 255, 0.1);
+      --color-border-hover: rgba(255, 255, 255, 0.2);
+      --color-bg-selected: rgba(255, 255, 255, 0.08);
+      --color-border-selected: rgba(255, 255, 255, 0.3);
+      --color-icon-selected: rgba(255, 255, 255, 0.8);
+      --color-status-neutral: rgba(255, 255, 255, 0.2);
+      --color-spinner-base: rgba(255, 255, 255, 0.1);
+      --color-spinner-track: rgba(255, 255, 255, 0.8);
+      --color-skeleton-bg: rgba(255, 255, 255, 0.03);
+      --color-skeleton-shimmer: rgba(255, 255, 255, 0.08);
+      --color-badge-primary-bg: #22c55e26;
+      --color-badge-primary-text: #22c55e;
+      --color-badge-overlay-bg: rgba(0, 0, 0, 0.7);
+      --color-badge-overlay-text: #ffffff;
+      --color-archive-bg: rgba(0, 0, 0, 0.6);
+      --color-archive-icon: #ffffff;
+      --color-archive-border: rgba(255, 255, 255, 0.1);
+      --color-archive-hover-bg: rgba(255, 255, 255, 0.1);
+      --color-archive-hover-border: rgba(255, 255, 255, 0.2);
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --color-bg-body: #ffffff;
+        --color-bg-panel: #ffffff;
+        --color-modal-backdrop: rgba(255, 255, 255, 0.8);
+        --color-bg-surface: rgba(0, 0, 0, 0.05);
+        --color-bg-sunken: rgba(0, 0, 0, 0.02);
+        --color-text-primary: #000000;
+        --color-text-inverse: #ffffff;
+        --color-text-secondary: rgba(0, 0, 0, 0.6);
+        --color-text-tertiary: rgba(0, 0, 0, 0.4);
+        --color-text-quaternary: rgba(0, 0, 0, 0.2);
+        --color-text-error: #ef4444;
+        --color-border-default: rgba(0, 0, 0, 0.1);
+        --color-border-hover: rgba(0, 0, 0, 0.2);
+        --color-bg-selected: rgba(0, 0, 0, 0.08);
+        --color-border-selected: rgba(0, 0, 0, 0.3);
+        --color-icon-selected: rgba(0, 0, 0, 0.8);
+        --color-status-neutral: #000000;
+        --color-spinner-base: rgba(0, 0, 0, 0.1);
+        --color-spinner-track: rgba(0, 0, 0, 0.8);
+        --color-skeleton-bg: rgba(0, 0, 0, 0.05);
+        --color-skeleton-shimmer: rgba(0, 0, 0, 0.08);
+        --color-badge-primary-bg: #22c55e;
+        --color-badge-primary-text: #ffffff;
+        --color-badge-overlay-bg: #000000;
+        --color-badge-overlay-text: #ffffff;
+        --color-archive-bg: rgba(255, 255, 255, 0.9);
+        --color-archive-icon: #000000;
+        --color-archive-border: rgba(0, 0, 0, 0.1);
+        --color-archive-hover-bg: rgba(255, 255, 255, 1);
+        --color-archive-hover-border: rgba(0, 0, 0, 0.2);
+      }
+    }`;
+  document.head.appendChild(style);
+}
 var colors = {
-  bg: { body: "#0a0a0a", surface: "#1a1a1a", sunken: "#111" },
-  text: { primary: "#fff", secondary: "#888", tertiary: "#666", quaternary: "#555", error: "#fca5a5" },
-  border: { default: "#333", hover: "#444" },
+  bg: { body: "var(--color-bg-body)", panel: "var(--color-bg-panel)", backdrop: "var(--color-modal-backdrop)", surface: "var(--color-bg-surface)", sunken: "var(--color-bg-sunken)", selected: "var(--color-bg-selected)" },
+  text: { primary: "var(--color-text-primary)", inverse: "var(--color-text-inverse)", secondary: "var(--color-text-secondary)", tertiary: "var(--color-text-tertiary)", quaternary: "var(--color-text-quaternary)", error: "var(--color-text-error)" },
+  border: { default: "var(--color-border-default)", hover: "var(--color-border-hover)", selected: "var(--color-border-selected)" },
+  icon: { selected: "var(--color-icon-selected)" },
+  spinner: { base: "var(--color-spinner-base)", track: "var(--color-spinner-track)" },
+  skeleton: { bg: "var(--color-skeleton-bg)", shimmer: "var(--color-skeleton-shimmer)" },
+  badge: {
+    primaryBg: "var(--color-badge-primary-bg)",
+    primaryText: "var(--color-badge-primary-text)",
+    overlayBg: "var(--color-badge-overlay-bg)",
+    overlayText: "var(--color-badge-overlay-text)"
+  },
   status: {
     success: "#22c55e",
     info: "#3b82f6",
     warning: "#f59e0b",
     danger: "#ef4444",
-    neutral: "#888"
+    neutral: "var(--color-status-neutral)"
   }
 };
 var spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
@@ -781,9 +1093,9 @@ function StatusBar({ displaySeconds, screenshotCount, uploads }) {
     }, children: formatTime(displaySeconds) }),
     /* @__PURE__ */ jsxs("div", { style: { display: "flex", gap: spacing.lg, fontSize: fontSize.lg, color: colors.text.secondary }, children: [
       /* @__PURE__ */ jsxs("span", { children: [
-        screenshotCount + uploads.completed,
+        screenshotCount,
         " ",
-        screenshotCount + uploads.completed === 1 ? "screenshot" : "screenshots"
+        screenshotCount === 1 ? "screenshot" : "screenshots"
       ] }),
       uploads.pending > 0 && /* @__PURE__ */ jsxs("span", { style: { color: colors.status.warning }, children: [
         uploads.pending,
@@ -806,46 +1118,182 @@ function ScreenPreview({ imageUrl }) {
 var styles = {
   container: {
     position: "relative",
-    marginBottom: 16,
-    borderRadius: 8,
+    marginBottom: spacing.lg,
+    borderRadius: radii.md,
     overflow: "hidden",
-    background: "#111",
-    border: "1px solid #333"
+    background: colors.bg.sunken,
+    border: `1px solid ${colors.border.default}`
   },
   image: { width: "100%", display: "block" },
   label: {
     position: "absolute",
-    bottom: 8,
-    right: 8,
-    fontSize: 12,
-    color: "#aaa",
-    background: "rgba(0,0,0,0.7)",
+    bottom: spacing.sm,
+    right: spacing.sm,
+    fontSize: fontSize.sm,
+    color: colors.text.secondary,
+    background: "rgba(0,0,0,0.5)",
     padding: "2px 8px",
-    borderRadius: 4
+    borderRadius: radii.sm
   }
 };
+function CameraPreview({ stream, fallbackImageUrl }) {
+  const videoRef = useRef(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (stream) {
+      video.srcObject = stream;
+      video.play().catch(() => {
+      });
+    } else {
+      video.srcObject = null;
+    }
+  }, [stream]);
+  if (!stream && !fallbackImageUrl) return null;
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      style: {
+        position: "relative",
+        marginBottom: spacing.md,
+        borderRadius: radii.md,
+        overflow: "hidden",
+        background: colors.bg.sunken,
+        border: `1px solid ${colors.border.default}`
+      },
+      children: [
+        stream ? /* @__PURE__ */ jsx(
+          "video",
+          {
+            ref: videoRef,
+            muted: true,
+            playsInline: true,
+            autoPlay: true,
+            style: { width: "100%", display: "block", transform: "scaleX(-1)" }
+          }
+        ) : fallbackImageUrl && /* @__PURE__ */ jsx(
+          "img",
+          {
+            src: fallbackImageUrl,
+            alt: "Last captured frame",
+            style: { width: "100%", display: "block" }
+          }
+        ),
+        /* @__PURE__ */ jsx(
+          "span",
+          {
+            style: {
+              position: "absolute",
+              bottom: 8,
+              right: 8,
+              fontSize: fontSize.xs,
+              color: colors.text.tertiary,
+              background: "rgba(0,0,0,0.7)",
+              padding: "2px 8px",
+              borderRadius: radii.sm
+            },
+            children: stream ? "Live preview" : "Latest capture"
+          }
+        )
+      ]
+    }
+  );
+}
+function CameraSelector({
+  devices,
+  selectedDeviceId,
+  onSelect,
+  disabled
+}) {
+  if (devices.length === 0) return null;
+  return /* @__PURE__ */ jsxs("div", { style: { marginBottom: spacing.md }, children: [
+    /* @__PURE__ */ jsx(
+      "label",
+      {
+        style: {
+          display: "block",
+          fontSize: fontSize.sm,
+          color: colors.text.secondary,
+          marginBottom: spacing.xs
+        },
+        children: "Camera"
+      }
+    ),
+    /* @__PURE__ */ jsx(
+      "select",
+      {
+        value: selectedDeviceId ?? "",
+        onChange: (e) => onSelect(e.target.value),
+        disabled,
+        style: {
+          width: "100%",
+          padding: `${spacing.sm}px ${spacing.md}px`,
+          fontSize: fontSize.md,
+          color: colors.text.primary,
+          background: colors.bg.sunken,
+          border: `1px solid ${colors.border.default}`,
+          borderRadius: radii.md,
+          outline: "none",
+          cursor: disabled ? "not-allowed" : "pointer",
+          opacity: disabled ? 0.5 : 1
+        },
+        children: devices.map((device, i) => /* @__PURE__ */ jsx("option", { value: device.deviceId, children: device.label || `Camera ${i + 1}` }, device.deviceId))
+      }
+    )
+  ] });
+}
 var sizes = { sm: 16, md: 24, lg: 40 };
-var borders = { sm: 2, md: 3, lg: 4 };
-function Spinner({ size = "md", color = colors.status.info }) {
+function Spinner({ size = "md", color }) {
   const s = sizes[size];
-  const b = borders[size];
-  return /* @__PURE__ */ jsx("div", { style: {
-    width: s,
-    height: s,
-    borderRadius: "50%",
-    border: `${b}px solid ${colors.border.default}`,
-    borderTopColor: color,
-    animation: "spin 1s linear infinite",
-    flexShrink: 0
-  } });
+  const baseColor = colors.spinner.base;
+  const trackColor = color || colors.spinner.track;
+  return /* @__PURE__ */ jsxs(
+    "svg",
+    {
+      width: s,
+      height: s,
+      viewBox: "0 0 24 24",
+      fill: "none",
+      xmlns: "http://www.w3.org/2000/svg",
+      style: {
+        animation: "spin 1s linear infinite",
+        flexShrink: 0
+      },
+      children: [
+        /* @__PURE__ */ jsx(
+          "circle",
+          {
+            cx: "12",
+            cy: "12",
+            r: "10",
+            stroke: baseColor,
+            strokeWidth: "2"
+          }
+        ),
+        /* @__PURE__ */ jsx(
+          "circle",
+          {
+            cx: "12",
+            cy: "12",
+            r: "10",
+            stroke: trackColor,
+            strokeWidth: "2",
+            strokeLinecap: "round",
+            strokeDasharray: "62.83",
+            strokeDashoffset: "47.12"
+          }
+        )
+      ]
+    }
+  );
 }
 var variantStyles = {
-  primary: { background: colors.status.info, color: "#fff", border: "none" },
-  success: { background: colors.status.success, color: "#fff", border: "none" },
-  danger: { background: colors.status.danger, color: "#fff", border: "none" },
-  warning: { background: colors.status.warning, color: "#000", border: "none" },
+  primary: { background: colors.status.info, color: "#fff", border: "1px solid transparent" },
+  success: { background: colors.status.success, color: "#fff", border: "1px solid transparent" },
+  danger: { background: colors.status.danger, color: "#fff", border: "1px solid transparent" },
+  warning: { background: colors.status.warning, color: "#000", border: "1px solid transparent" },
   secondary: { background: "transparent", color: colors.text.secondary, border: `1px solid ${colors.border.hover}` },
-  ghost: { background: "transparent", color: colors.text.secondary, border: "none" }
+  ghost: { background: "transparent", color: colors.text.secondary, border: "1px solid transparent" }
 };
 var sizeStyles = {
   sm: { padding: "6px 12px", fontSize: 12 },
@@ -863,29 +1311,68 @@ function Button({
   ...rest
 }) {
   const isDisabled = disabled || loading;
+  const { background, border, borderRadius, color, ...outerStyle } = style || {};
   return /* @__PURE__ */ jsxs(
-    "button",
+    motion.button,
     {
+      whileTap: isDisabled ? void 0 : "active",
+      initial: "idle",
       disabled: isDisabled,
       style: {
+        position: "relative",
         fontWeight: fontWeight.semibold,
-        borderRadius: radii.md,
+        borderRadius: borderRadius ?? radii.md,
         cursor: isDisabled ? "not-allowed" : "pointer",
         opacity: isDisabled ? 0.6 : 1,
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: 8,
         width: fullWidth ? "100%" : void 0,
-        transition: "opacity 0.15s",
-        ...variantStyles[variant],
-        ...sizeStyles[size],
-        ...style
+        padding: 0,
+        color: color ?? variantStyles[variant].color,
+        background: "transparent",
+        border: "1px solid transparent",
+        ...outerStyle
       },
       ...rest,
       children: [
-        loading && /* @__PURE__ */ jsx(Spinner, { size: "sm", color: variant === "warning" ? "#000" : "#fff" }),
-        children
+        /* @__PURE__ */ jsx(
+          motion.div,
+          {
+            variants: {
+              idle: { scale: 1 },
+              active: { scale: 0.96 }
+            },
+            transition: { type: "spring", stiffness: 1500, damping: 60 },
+            style: {
+              position: "absolute",
+              inset: -1,
+              borderRadius: borderRadius ?? radii.md,
+              background: background ?? variantStyles[variant].background,
+              border: border ?? variantStyles[variant].border,
+              transition: "opacity 0.15s, background 0.15s, border-color 0.15s"
+            }
+          }
+        ),
+        /* @__PURE__ */ jsxs(
+          "span",
+          {
+            style: {
+              position: "relative",
+              zIndex: 1,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              width: "100%",
+              ...sizeStyles[size]
+            },
+            children: [
+              loading && /* @__PURE__ */ jsx(Spinner, { size: "sm", color: variant === "warning" ? "#000" : "#fff" }),
+              children
+            ]
+          }
+        )
       ]
     }
   );
@@ -897,7 +1384,8 @@ function RecordingControls({
   onPause,
   onResume,
   onStop,
-  loading
+  loading,
+  captureMode = "screen"
 }) {
   const isActive = status === "active" || status === "pending";
   const isPaused = status === "paused";
@@ -908,9 +1396,9 @@ function RecordingControls({
     justifyContent: "center",
     flexWrap: "wrap"
   }, children: [
-    !isSharing && isActive && /* @__PURE__ */ jsx(Button, { variant: "success", size: "lg", onClick: onStartSharing, loading, children: "Share Screen & Start Recording" }),
+    !isSharing && isActive && /* @__PURE__ */ jsx(Button, { variant: "success", size: "lg", onClick: onStartSharing, loading, children: captureMode === "camera" ? "Start Camera & Record" : "Share Screen & Start Recording" }),
     !isSharing && isPaused && /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsx(Button, { variant: "primary", size: "lg", onClick: onStartSharing, loading, children: "Share Screen & Resume" }),
+      /* @__PURE__ */ jsx(Button, { variant: "primary", size: "lg", onClick: onStartSharing, loading, children: captureMode === "camera" ? "Start Camera & Resume" : "Share Screen & Resume" }),
       /* @__PURE__ */ jsx(Button, { variant: "danger", size: "md", onClick: onStop, children: "Stop Session" })
     ] }),
     isSharing && isActive && /* @__PURE__ */ jsxs(Fragment, { children: [
@@ -934,7 +1422,8 @@ function RecordingControls({
 }
 function ProcessingState({ status, trackedSeconds, videoUrl, error, onVideoLoaded }) {
   const containerStyle = {
-    borderRadius: radii.lg,
+    width: "100%",
+    borderRadius: 0,
     overflow: "hidden",
     background: colors.bg.sunken,
     aspectRatio: "16/9",
@@ -945,7 +1434,7 @@ function ProcessingState({ status, trackedSeconds, videoUrl, error, onVideoLoade
     gap: spacing.md
   };
   if (status === "complete" && videoUrl) {
-    return /* @__PURE__ */ jsx("div", { style: { borderRadius: radii.lg, overflow: "hidden", background: colors.bg.sunken, aspectRatio: "16/9" }, children: /* @__PURE__ */ jsx("video", { src: videoUrl, controls: true, autoPlay: false, style: { width: "100%", height: "100%", display: "block" } }) });
+    return /* @__PURE__ */ jsx("div", { style: { width: "100%", borderRadius: 0, overflow: "hidden", background: colors.bg.sunken, aspectRatio: "16/9" }, children: /* @__PURE__ */ jsx("video", { src: videoUrl, controls: true, autoPlay: false, style: { width: "100%", height: "100%", display: "block" } }) });
   }
   if (status === "complete" && error) {
     return /* @__PURE__ */ jsx("div", { style: containerStyle, children: /* @__PURE__ */ jsx("p", { style: { fontSize: fontSize.lg, color: colors.text.secondary, textAlign: "center" }, children: "No video available" }) });
@@ -984,8 +1473,46 @@ function ErrorDisplay({ error, variant = "banner", title, onDismiss, onCopy, act
       title && /* @__PURE__ */ jsx("strong", { style: { display: "block", marginBottom: spacing.xs }, children: title }),
       /* @__PURE__ */ jsx("pre", { style: { margin: 0, fontSize: fontSize.xs, fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all", maxHeight: 120, overflowY: "auto" }, children: error })
     ] }),
-    onCopy && /* @__PURE__ */ jsx("button", { onClick: onCopy, style: { background: "none", border: "1px solid " + colors.text.error, color: colors.text.error, cursor: "pointer", fontSize: fontSize.xs, lineHeight: 1, padding: "2px 8px", borderRadius: radii.sm, whiteSpace: "nowrap" }, children: "Copy" }),
-    onDismiss && /* @__PURE__ */ jsx("button", { onClick: onDismiss, style: { background: "none", border: "none", color: colors.text.error, cursor: "pointer", fontSize: fontSize.xl, lineHeight: 1, padding: 0 }, children: "\xD7" })
+    onCopy && /* @__PURE__ */ jsxs(
+      motion.button,
+      {
+        onClick: onCopy,
+        whileTap: "active",
+        initial: "idle",
+        style: { background: "transparent", border: "none", color: colors.text.error, cursor: "pointer", fontSize: fontSize.xs, lineHeight: 1, padding: "2px 8px", borderRadius: radii.sm, whiteSpace: "nowrap", position: "relative" },
+        children: [
+          /* @__PURE__ */ jsx(
+            motion.div,
+            {
+              variants: { idle: { scale: 1 }, active: { scale: 0.96 } },
+              transition: { type: "spring", stiffness: 1500, damping: 60 },
+              style: { position: "absolute", inset: 0, borderRadius: radii.sm, border: "1px solid " + colors.text.error, zIndex: 0 }
+            }
+          ),
+          /* @__PURE__ */ jsx("span", { style: { position: "relative", zIndex: 1, display: "inline-block" }, children: "Copy" })
+        ]
+      }
+    ),
+    onDismiss && /* @__PURE__ */ jsxs(
+      motion.button,
+      {
+        onClick: onDismiss,
+        whileTap: "active",
+        initial: "idle",
+        style: { background: "none", border: "none", color: colors.text.error, cursor: "pointer", fontSize: fontSize.xl, lineHeight: 1, padding: 0, position: "relative" },
+        children: [
+          /* @__PURE__ */ jsx(
+            motion.div,
+            {
+              variants: { idle: { scale: 1 }, active: { scale: 0.96 } },
+              transition: { type: "spring", stiffness: 1500, damping: 60 },
+              style: { position: "absolute", inset: -2, borderRadius: "50%", background: "transparent", zIndex: 0 }
+            }
+          ),
+          /* @__PURE__ */ jsx("span", { style: { position: "relative", zIndex: 1, display: "inline-block" }, children: "\xD7" })
+        ]
+      }
+    )
   ] });
 }
 function PageContainer({ children, maxWidth = 640, centered = false, style }) {
@@ -1019,13 +1546,77 @@ function CollapseRecorder() {
     return /* @__PURE__ */ jsx(PageContainer, { centered: true, children: /* @__PURE__ */ jsx(ErrorDisplay, { error: state.error ?? "Unknown error", variant: "page" }) });
   }
   if (state.status === "stopped" || state.status === "compiling" || state.status === "complete" || state.status === "failed") {
-    return /* @__PURE__ */ jsx(PageContainer, { maxWidth: 800, style: { padding: spacing.xxl }, children: /* @__PURE__ */ jsx(
+    return /* @__PURE__ */ jsx(PageContainer, { style: { padding: spacing.xxl }, children: /* @__PURE__ */ jsx(
       ProcessingState,
       {
         status: state.status,
         trackedSeconds: state.trackedSeconds
       }
     ) });
+  }
+  const isCamera = state.captureMode === "camera";
+  if (isCamera) {
+    return /* @__PURE__ */ jsxs(PageContainer, { maxWidth: 800, style: { padding: spacing.xxl }, children: [
+      /* @__PURE__ */ jsx(
+        StatusBar,
+        {
+          displaySeconds: state.displaySeconds,
+          screenshotCount: state.screenshotCount,
+          uploads: state.uploads
+        }
+      ),
+      state.availableCameras.length > 1 && /* @__PURE__ */ jsx(
+        CameraSelector,
+        {
+          devices: state.availableCameras,
+          selectedDeviceId: state.selectedCameraId,
+          onSelect: actions.selectCamera,
+          disabled: state.isSharing
+        }
+      ),
+      state.isPreviewing || state.previewStream ? /* @__PURE__ */ jsx(
+        CameraPreview,
+        {
+          stream: state.previewStream,
+          fallbackImageUrl: state.lastScreenshotUrl
+        }
+      ) : state.lastScreenshotUrl ? /* @__PURE__ */ jsx(ScreenPreview, { imageUrl: state.lastScreenshotUrl }) : null,
+      !state.isPreviewing && !state.isSharing ? (
+        /* Phase 1: No stream yet — prompt to start camera */
+        /* @__PURE__ */ jsx(
+          CameraIdleControls,
+          {
+            status: state.status,
+            onStartPreview: actions.startPreview,
+            onStartRecording: actions.startSharing,
+            onStop: actions.stop
+          }
+        )
+      ) : state.isPreviewing && !state.isSharing ? (
+        /* Phase 2: Previewing — show "Start Recording" */
+        /* @__PURE__ */ jsx(
+          CameraPreviewControls,
+          {
+            onStartRecording: actions.startSharing,
+            onStopPreview: actions.stopPreview
+          }
+        )
+      ) : (
+        /* Phase 3: Recording — standard recording controls */
+        /* @__PURE__ */ jsx(
+          RecordingControls,
+          {
+            status: state.status,
+            isSharing: state.isSharing,
+            onStartSharing: actions.startSharing,
+            onPause: actions.pause,
+            onResume: actions.resume,
+            onStop: actions.stop,
+            captureMode: "camera"
+          }
+        )
+      )
+    ] });
   }
   return /* @__PURE__ */ jsxs(PageContainer, { maxWidth: 800, style: { padding: spacing.xxl }, children: [
     /* @__PURE__ */ jsx(
@@ -1045,9 +1636,43 @@ function CollapseRecorder() {
         onStartSharing: actions.startSharing,
         onPause: actions.pause,
         onResume: actions.resume,
-        onStop: actions.stop
+        onStop: actions.stop,
+        captureMode: "screen"
       }
     )
+  ] });
+}
+function CameraIdleControls({
+  status,
+  onStartPreview,
+  onStartRecording,
+  onStop
+}) {
+  const isPaused = status === "paused";
+  return /* @__PURE__ */ jsx("div", { style: {
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.md,
+    justifyContent: "center",
+    flexWrap: "wrap"
+  }, children: isPaused ? /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx(Button, { variant: "primary", size: "lg", onClick: onStartRecording, children: "Start Camera & Resume" }),
+    /* @__PURE__ */ jsx(Button, { variant: "danger", size: "md", onClick: onStop, children: "Stop Session" })
+  ] }) : /* @__PURE__ */ jsx(Button, { variant: "success", size: "lg", onClick: onStartPreview, children: "Start Camera" }) });
+}
+function CameraPreviewControls({
+  onStartRecording,
+  onStopPreview
+}) {
+  return /* @__PURE__ */ jsxs("div", { style: {
+    display: "flex",
+    alignItems: "center",
+    gap: spacing.md,
+    justifyContent: "center",
+    flexWrap: "wrap"
+  }, children: [
+    /* @__PURE__ */ jsx(Button, { variant: "success", size: "lg", onClick: onStartRecording, children: "Start Recording" }),
+    /* @__PURE__ */ jsx(Button, { variant: "secondary", size: "md", onClick: onStopPreview, children: "Cancel" })
   ] });
 }
 function ResultView({ status, trackedSeconds }) {
@@ -1077,37 +1702,60 @@ function ResultView({ status, trackedSeconds }) {
     }
   );
 }
-function Badge({ status, variant = "overlay" }) {
-  const config = statusConfig[status] ?? { label: status, color: "#888" };
+function Badge({ status, variant = "overlay", size = "sm" }) {
+  const config = statusConfig[status] ?? { label: status, color: "var(--color-status-neutral)" };
   const isOverlay = variant === "overlay";
+  const sizeStyles2 = {
+    sm: { fontSize: fontSize.xs - 1, padding: "2px 8px" },
+    md: { fontSize: fontSize.sm, padding: "4px 12px" },
+    lg: { fontSize: fontSize.md, padding: "6px 16px" }
+  };
   return /* @__PURE__ */ jsx("span", { style: {
-    fontSize: fontSize.xs - 1,
-    // 10px
+    ...sizeStyles2[size],
     fontWeight: fontWeight.semibold,
-    color: config.color,
-    padding: "2px 8px",
-    borderRadius: 4,
-    ...isOverlay ? { background: "rgba(0,0,0,0.7)", border: `1px solid ${config.color}` } : { background: `${config.color}15` }
+    color: "#fff",
+    // Keeping text white since background is usually a colorful status pill or dark neutral pill
+    borderRadius: 999,
+    background: config.color,
+    ...isOverlay ? { boxShadow: `0 0 0 1px rgba(0,0,0,0.1)` } : {}
   }, children: config.label });
 }
 function Card({ children, onClick, padding, style }) {
-  return /* @__PURE__ */ jsx(
+  const content = /* @__PURE__ */ jsx(
     "div",
     {
-      onClick,
-      role: onClick ? "button" : void 0,
-      tabIndex: onClick ? 0 : void 0,
       style: {
         background: colors.bg.surface,
         border: `1px solid ${colors.border.default}`,
         borderRadius: radii.lg,
         overflow: "hidden",
-        cursor: onClick ? "pointer" : void 0,
-        transition: "border-color 0.15s",
         padding,
-        ...style
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        ...onClick ? {} : style
       },
       children
+    }
+  );
+  if (!onClick) {
+    return content;
+  }
+  return /* @__PURE__ */ jsx(
+    motion.div,
+    {
+      onClick,
+      role: "button",
+      tabIndex: 0,
+      whileTap: { scale: 0.99 },
+      transition: { type: "spring", stiffness: 1500, damping: 60 },
+      style: {
+        cursor: "pointer",
+        display: "block",
+        height: "100%",
+        ...style
+      },
+      children: content
     }
   );
 }
@@ -1151,31 +1799,73 @@ function SessionCard({ session, onClick, onArchive }) {
         dateStr
       ] })
     ] }),
-    onArchive && /* @__PURE__ */ jsx(
-      "button",
+    onArchive && /* @__PURE__ */ jsxs(
+      motion.button,
       {
+        whileTap: "active",
+        initial: "idle",
         style: {
           position: "absolute",
-          top: 6,
-          left: 6,
+          top: spacing.sm,
+          left: spacing.sm,
           width: 24,
           height: 24,
           borderRadius: "50%",
-          background: "rgba(0,0,0,0.6)",
-          color: colors.text.secondary,
+          background: "transparent",
+          color: "var(--color-archive-icon, #fff)",
           border: "none",
           cursor: "pointer",
           fontSize: fontSize.lg,
-          lineHeight: "24px",
-          textAlign: "center",
-          padding: 0
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          zIndex: 10
         },
         onClick: (e) => {
           e.stopPropagation();
           onArchive();
         },
+        onPointerDown: (e) => e.stopPropagation(),
         title: "Archive",
-        children: "\xD7"
+        children: [
+          /* @__PURE__ */ jsx(
+            motion.div,
+            {
+              variants: { idle: { scale: 1 }, active: { scale: 0.99 } },
+              transition: { type: "spring", stiffness: 1500, damping: 60 },
+              style: {
+                position: "absolute",
+                inset: 0,
+                borderRadius: "50%",
+                background: "var(--color-archive-bg, rgba(0,0,0,0.6))",
+                backdropFilter: "blur(4px)",
+                WebkitBackdropFilter: "blur(4px)",
+                border: `1px solid var(--color-archive-border, rgba(255,255,255,0.1))`,
+                zIndex: 0,
+                transition: "all 0.15s"
+              },
+              onMouseEnter: (e) => {
+                e.currentTarget.style.background = "var(--color-archive-hover-bg, rgba(255,255,255,0.1))";
+                e.currentTarget.style.borderColor = "var(--color-archive-hover-border, rgba(255,255,255,0.2))";
+                if (e.currentTarget.parentElement) {
+                  e.currentTarget.parentElement.style.color = "var(--color-text-error, #ef4444)";
+                }
+              },
+              onMouseLeave: (e) => {
+                e.currentTarget.style.background = "var(--color-archive-bg, rgba(0,0,0,0.6))";
+                e.currentTarget.style.borderColor = "var(--color-archive-border, rgba(255,255,255,0.1))";
+                if (e.currentTarget.parentElement) {
+                  e.currentTarget.parentElement.style.color = "var(--color-archive-icon, #fff)";
+                }
+              }
+            }
+          ),
+          /* @__PURE__ */ jsx("div", { style: { position: "relative", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "color 0.15s" }, children: /* @__PURE__ */ jsxs("svg", { width: "14", height: "14", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", children: [
+            /* @__PURE__ */ jsx("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
+            /* @__PURE__ */ jsx("line", { x1: "6", y1: "6", x2: "18", y2: "18" })
+          ] }) })
+        ]
       }
     )
   ] });
@@ -1186,7 +1876,8 @@ function Skeleton({ width, height, borderRadius = radii.md, aspectRatio, style }
     height: height ?? (aspectRatio ? void 0 : 20),
     aspectRatio,
     borderRadius,
-    background: `linear-gradient(90deg, ${colors.bg.surface} 25%, ${colors.border.default} 50%, ${colors.bg.surface} 75%)`,
+    backgroundColor: colors.skeleton.bg,
+    backgroundImage: `linear-gradient(90deg, transparent 0%, ${colors.skeleton.shimmer} 50%, transparent 100%)`,
     backgroundSize: "200% 100%",
     animation: "shimmer 1.5s ease-in-out infinite",
     ...style
@@ -1208,7 +1899,7 @@ function GallerySkeleton() {
   ] });
 }
 function SessionDetailSkeleton() {
-  return /* @__PURE__ */ jsxs("div", { style: { maxWidth: 640, margin: "0 auto", padding: spacing.lg }, children: [
+  return /* @__PURE__ */ jsxs("div", { style: { padding: spacing.lg }, children: [
     /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: spacing.lg }, children: [
       /* @__PURE__ */ jsx(Skeleton, { width: 80, height: 32, borderRadius: radii.sm }),
       /* @__PURE__ */ jsx(Skeleton, { width: 80, height: 32, borderRadius: radii.sm })
@@ -1239,22 +1930,36 @@ function Gallery({
   onArchive,
   onRefresh
 }) {
+  const scrollRef = useRef(null);
+  const [showTopMask, setShowTopMask] = useState(false);
+  const [showBottomMask, setShowBottomMask] = useState(false);
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    setShowTopMask(scrollTop > 0);
+    setShowBottomMask(Math.ceil(scrollTop + clientHeight) < scrollHeight);
+  }, []);
+  useEffect(() => {
+    handleScroll();
+    window.addEventListener("resize", handleScroll);
+    return () => window.removeEventListener("resize", handleScroll);
+  }, [sessions, handleScroll]);
   if (loading && sessions.length === 0) {
     return /* @__PURE__ */ jsx(GallerySkeleton, {});
   }
   if (error && sessions.length === 0) {
-    return /* @__PURE__ */ jsxs("div", { style: { padding: spacing.lg }, children: [
-      /* @__PURE__ */ jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.lg }, children: /* @__PURE__ */ jsx("h2", { style: { fontSize: fontSize.heading, fontWeight: fontWeight.bold, color: colors.text.primary, margin: 0 }, children: "Your Timelapses" }) }),
-      /* @__PURE__ */ jsxs("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, padding: spacing.xxl }, children: [
+    return /* @__PURE__ */ jsxs("div", { style: { display: "flex", flexDirection: "column", height: "100%" }, children: [
+      /* @__PURE__ */ jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing.lg, paddingBottom: 0, flexShrink: 0 }, children: /* @__PURE__ */ jsx("h2", { style: { fontSize: fontSize.heading, fontWeight: fontWeight.bold, color: colors.text.primary, margin: 0 }, children: "Your Timelapses" }) }),
+      /* @__PURE__ */ jsxs("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: spacing.xxl }, children: [
         /* @__PURE__ */ jsx(ErrorDisplay, { error, variant: "inline" }),
         onRefresh && /* @__PURE__ */ jsx(Button, { variant: "primary", size: "md", onClick: onRefresh, style: { marginTop: spacing.md }, children: "Retry" })
       ] })
     ] });
   }
   if (sessions.length === 0) {
-    return /* @__PURE__ */ jsxs("div", { style: { padding: spacing.lg }, children: [
-      /* @__PURE__ */ jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.lg }, children: /* @__PURE__ */ jsx("h2", { style: { fontSize: fontSize.heading, fontWeight: fontWeight.bold, color: colors.text.primary, margin: 0 }, children: "Your Timelapses" }) }),
-      /* @__PURE__ */ jsxs("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, padding: spacing.xxl }, children: [
+    return /* @__PURE__ */ jsxs("div", { style: { display: "flex", flexDirection: "column", height: "100%" }, children: [
+      /* @__PURE__ */ jsx("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing.lg, paddingBottom: 0, flexShrink: 0 }, children: /* @__PURE__ */ jsx("h2", { style: { fontSize: fontSize.heading, fontWeight: fontWeight.bold, color: colors.text.primary, margin: 0 }, children: "Your Timelapses" }) }),
+      /* @__PURE__ */ jsxs("div", { style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: spacing.xxl }, children: [
         /* @__PURE__ */ jsx("p", { style: { marginBottom: spacing.md }, children: /* @__PURE__ */ jsxs("svg", { width: "48", height: "48", viewBox: "0 0 24 24", fill: "none", stroke: colors.text.primary, strokeWidth: "1.5", style: { opacity: 0.2 }, children: [
           /* @__PURE__ */ jsx("rect", { x: "2", y: "3", width: "20", height: "14", rx: "2", ry: "2" }),
           /* @__PURE__ */ jsx("line", { x1: "8", y1: "21", x2: "16", y2: "21" }),
@@ -1265,20 +1970,34 @@ function Gallery({
       ] })
     ] });
   }
-  return /* @__PURE__ */ jsxs("div", { style: { padding: spacing.lg }, children: [
-    /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.lg }, children: [
+  return /* @__PURE__ */ jsxs("div", { style: { display: "flex", flexDirection: "column", height: "100%" }, children: [
+    /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: spacing.lg, paddingBottom: 0, flexShrink: 0 }, children: [
       /* @__PURE__ */ jsx("h2", { style: { fontSize: fontSize.heading, fontWeight: fontWeight.bold, color: colors.text.primary, margin: 0 }, children: "Your Timelapses" }),
       onRefresh && /* @__PURE__ */ jsx(Button, { variant: "ghost", size: "sm", onClick: onRefresh, title: "Refresh", style: { fontSize: fontSize.xxl }, children: "\u21BB" })
     ] }),
-    /* @__PURE__ */ jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: spacing.md }, children: sessions.map((s) => /* @__PURE__ */ jsx(
-      SessionCard,
+    /* @__PURE__ */ jsx(
+      "div",
       {
-        session: s,
-        onClick: () => onSessionClick?.(s.token),
-        onArchive: onArchive ? () => onArchive(s.token) : void 0
-      },
-      s.token
-    )) })
+        ref: scrollRef,
+        onScroll: handleScroll,
+        style: {
+          flex: 1,
+          overflowY: "auto",
+          padding: spacing.lg,
+          maskImage: `linear-gradient(to bottom, ${showTopMask ? "transparent 0%, black 20px" : "black 0%, black 20px"}, ${showBottomMask ? "black calc(100% - 20px), transparent 100%" : "black calc(100% - 20px), black 100%"})`,
+          WebkitMaskImage: `linear-gradient(to bottom, ${showTopMask ? "transparent 0%, black 20px" : "black 0%, black 20px"}, ${showBottomMask ? "black calc(100% - 20px), transparent 100%" : "black calc(100% - 20px), black 100%"})`
+        },
+        children: /* @__PURE__ */ jsx("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: spacing.md }, children: sessions.map((s) => /* @__PURE__ */ jsx(
+          SessionCard,
+          {
+            session: s,
+            onClick: () => onSessionClick?.(s.token),
+            onArchive: onArchive ? () => onArchive(s.token) : void 0
+          },
+          s.token
+        )) })
+      }
+    )
   ] });
 }
 function SessionDetail({
@@ -1335,7 +2054,7 @@ ${body.slice(0, 500)}`);
     const interval = setInterval(fetchStatus, 3e3);
     return () => clearInterval(interval);
   }, [status?.status, fetchStatus]);
-  return /* @__PURE__ */ jsxs("div", { style: { maxWidth: 640, margin: "0 auto", padding: spacing.lg }, children: [
+  return /* @__PURE__ */ jsxs("div", { style: { padding: spacing.lg }, children: [
     /* @__PURE__ */ jsxs("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: spacing.lg }, children: [
       onBack && /* @__PURE__ */ jsx(Button, { variant: "secondary", size: "sm", onClick: onBack, children: "\u2190 Back" }),
       /* @__PURE__ */ jsx("div", { style: { display: "flex", gap: spacing.sm }, children: onArchive && /* @__PURE__ */ jsx(Button, { variant: "secondary", size: "sm", onClick: onArchive, children: "Archive" }) })
@@ -1347,7 +2066,7 @@ ${body.slice(0, 500)}`);
     error && /* @__PURE__ */ jsx(ErrorDisplay, { error, variant: "banner", title: "Error" }),
     !status && !error && /* @__PURE__ */ jsx(SessionDetailSkeleton, {}),
     status && /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsx("div", { style: { marginBottom: spacing.lg }, children: /* @__PURE__ */ jsx(
+      /* @__PURE__ */ jsx("div", { style: { marginBottom: spacing.lg, marginLeft: -spacing.lg, marginRight: -spacing.lg }, children: /* @__PURE__ */ jsx(
         ProcessingState,
         {
           status: status.status,
@@ -1357,15 +2076,11 @@ ${body.slice(0, 500)}`);
       ) }),
       /* @__PURE__ */ jsxs("div", { style: { display: "flex", gap: spacing.lg, justifyContent: "center" }, children: [
         /* @__PURE__ */ jsxs(Card, { padding: `${spacing.md}px ${spacing.xxl}px`, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: spacing.xs }, children: [
-          /* @__PURE__ */ jsx("span", { style: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text.primary }, children: formatTrackedTime(status.trackedSeconds) }),
+          /* @__PURE__ */ jsx("span", { style: { fontSize: fontSize.xxl, fontWeight: fontWeight.bold, color: colors.text.primary, height: 32, display: "flex", alignItems: "center" }, children: formatTrackedTime(status.trackedSeconds) }),
           /* @__PURE__ */ jsx("span", { style: { fontSize: fontSize.xs, color: colors.text.tertiary }, children: "Tracked time" })
         ] }),
         /* @__PURE__ */ jsxs(Card, { padding: `${spacing.md}px ${spacing.xxl}px`, style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: spacing.xs }, children: [
-          /* @__PURE__ */ jsx("span", { style: {
-            fontSize: fontSize.xxl,
-            fontWeight: fontWeight.bold,
-            color: (statusConfig[status.status] ?? { color: colors.text.secondary }).color
-          }, children: (statusConfig[status.status] ?? { label: status.status }).label }),
+          /* @__PURE__ */ jsx("div", { style: { height: 32, display: "flex", alignItems: "center" }, children: /* @__PURE__ */ jsx(Badge, { status: status.status, variant: "inline", size: "lg" }) }),
           /* @__PURE__ */ jsx("span", { style: { fontSize: fontSize.xs, color: colors.text.tertiary }, children: "Status" })
         ] })
       ] })
@@ -1553,4 +2268,4 @@ function useHashRouter() {
   return { route, navigate };
 }
 
-export { Badge, Button, Card, CollapseProvider, CollapseRecorder, ErrorDisplay, Gallery, GallerySkeleton, PageContainer, ProcessingState, RecordPageSkeleton, RecordingControls, ResultView, ScreenPreview, SessionCard, SessionDetail, SessionDetailSkeleton, Skeleton, Spinner, StatusBar, colors, createCollapseClient, fontSize, fontWeight, formatTime, formatTrackedTime, radii, spacing, statusConfig, useCollapse, useGallery, useHashRouter, useScreenCapture, useSession, useSessionTimer, useTokenStore, useUploader };
+export { Badge, Button, CameraPreview, CameraSelector, Card, CollapseProvider, CollapseRecorder, ErrorDisplay, Gallery, GallerySkeleton, PageContainer, ProcessingState, RecordPageSkeleton, RecordingControls, ResultView, ScreenPreview, SessionCard, SessionDetail, SessionDetailSkeleton, Skeleton, Spinner, StatusBar, colors, createCollapseClient, fontSize, fontWeight, formatTime, formatTrackedTime, radii, spacing, statusConfig, useCameraCapture, useCollapse, useGallery, useHashRouter, useScreenCapture, useSession, useSessionTimer, useTokenStore, useUploader };

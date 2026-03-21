@@ -5,6 +5,14 @@ export { SESSION_STATUSES, SessionStatus, SessionSummary } from '@collapse/share
 
 /** Returns the session token. Accepts a static string, sync getter, or async getter. */
 type TokenProvider = string | (() => string) | (() => Promise<string>);
+/** Capture source: screen sharing or webcam camera. */
+type CaptureMode = "screen" | "camera";
+interface CameraSettings {
+    /** Preferred camera device ID (from enumerateDevices). Omit for default camera. */
+    deviceId?: string;
+    /** Additional getUserMedia video constraints (merged with defaults). */
+    userMediaConstraints?: MediaTrackConstraints;
+}
 interface CaptureSettings {
     /** Screenshot interval in ms. Default: 60000 */
     intervalMs?: number;
@@ -16,6 +24,10 @@ interface CaptureSettings {
     maxHeight?: number;
     /** Override getDisplayMedia constraints (merged with defaults). */
     displayMediaConstraints?: DisplayMediaStreamOptions;
+    /** Capture mode: "screen" (default) or "camera". */
+    mode?: CaptureMode;
+    /** Camera-specific settings. Only used when mode is "camera". */
+    camera?: CameraSettings;
 }
 interface RetrySettings {
     /** Max retries per upload step. Default: 3 */
@@ -92,8 +104,9 @@ interface CollapseConfig {
 interface ResolvedConfig {
     token: TokenProvider;
     apiBaseUrl: string;
-    capture: Required<Omit<CaptureSettings, "displayMediaConstraints">> & {
+    capture: Required<Omit<CaptureSettings, "displayMediaConstraints" | "camera">> & {
         displayMediaConstraints?: DisplayMediaStreamOptions;
+        camera: CameraSettings;
     };
     retry: Required<RetrySettings>;
     callbacks: CollapseCallbacks;
@@ -105,9 +118,11 @@ interface CollapseState {
     status: RecorderStatus;
     /** Whether getDisplayMedia is active. */
     isSharing: boolean;
-    /** Server-tracked seconds (confirmed buckets × 60). */
+    /** True when actively capturing (sharing + pending/active). Convenience for UI logic. */
+    isRecording: boolean;
+    /** Best-known tracked seconds (max of server, upload confirms, and local estimate). */
     trackedSeconds: number;
-    /** Client-interpolated display seconds (smooth ticking). */
+    /** Client-interpolated display seconds (smooth ticking, monotonic). */
     displaySeconds: number;
     /** Number of confirmed screenshots. */
     screenshotCount: number;
@@ -119,11 +134,21 @@ interface CollapseState {
     videoUrl: string | null;
     /** Error message when status is "error". */
     error: string | null;
+    /** Active capture mode. */
+    captureMode: CaptureMode;
+    /** Available camera devices (populated when mode is "camera"). */
+    availableCameras: MediaDeviceInfo[];
+    /** Currently selected camera device ID. */
+    selectedCameraId: string | null;
+    /** Whether camera is in preview mode (stream live, capture loop not started). */
+    isPreviewing: boolean;
+    /** Live camera MediaStream for rendering in a `<video>` element. Null when not previewing/recording. */
+    previewStream: MediaStream | null;
 }
 interface CollapseActions {
-    /** Start screen sharing and begin capturing. */
+    /** Start screen sharing (or camera) and begin capturing. */
     startSharing: () => Promise<void>;
-    /** Stop screen share without stopping session (auto-pauses). */
+    /** Stop screen share (or camera) without stopping session (auto-pauses). */
     stopSharing: () => void;
     /** Pause the session. */
     pause: () => Promise<void>;
@@ -133,6 +158,12 @@ interface CollapseActions {
     stop: (options?: {
         name?: string;
     }) => Promise<void>;
+    /** Select a camera device by ID. Only effective when captureMode is "camera". */
+    selectCamera: (deviceId: string) => void;
+    /** Start camera preview without recording. Acquires the stream so the UI can show a live video. */
+    startPreview: () => Promise<void>;
+    /** Stop camera preview (releases stream). */
+    stopPreview: () => void;
 }
 
 interface CollapseClient {
@@ -161,7 +192,11 @@ declare function CollapseProvider({ children, ...config }: CollapseProviderProps
 
 /**
  * Drop-in recorder widget. Handles the full lifecycle:
- * screen sharing, capture, upload, pause/resume/stop, compilation, video playback.
+ * screen/camera capture, upload, pause/resume/stop, compilation, video playback.
+ *
+ * Adapts its UI based on the configured `capture.mode`:
+ * - `"screen"` (default): screen sharing flow with `getDisplayMedia`
+ * - `"camera"`: webcam flow with live preview, device picker, then recording
  *
  * Must be used within a `<CollapseProvider>`.
  */
@@ -182,13 +217,35 @@ interface RecordingControlsProps {
     onResume: () => void;
     onStop: () => void;
     loading?: boolean;
+    /** Capture mode — adjusts button labels. Defaults to "screen". */
+    captureMode?: CaptureMode;
 }
-declare function RecordingControls({ status, isSharing, onStartSharing, onPause, onResume, onStop, loading, }: RecordingControlsProps): react_jsx_runtime.JSX.Element;
+declare function RecordingControls({ status, isSharing, onStartSharing, onPause, onResume, onStop, loading, captureMode, }: RecordingControlsProps): react_jsx_runtime.JSX.Element;
 
 interface ScreenPreviewProps {
     imageUrl: string | null;
 }
 declare function ScreenPreview({ imageUrl }: ScreenPreviewProps): react_jsx_runtime.JSX.Element | null;
+
+interface CameraSelectorProps {
+    devices: MediaDeviceInfo[];
+    selectedDeviceId: string | null;
+    onSelect: (deviceId: string) => void;
+    disabled?: boolean;
+}
+declare function CameraSelector({ devices, selectedDeviceId, onSelect, disabled, }: CameraSelectorProps): react_jsx_runtime.JSX.Element | null;
+
+interface CameraPreviewProps {
+    /** Live camera MediaStream to display. Shows nothing when null. */
+    stream: MediaStream | null;
+    /** Fallback static image URL (e.g. last captured screenshot). */
+    fallbackImageUrl?: string | null;
+}
+/**
+ * Live camera preview using a `<video>` element.
+ * Falls back to a static image when no stream is provided.
+ */
+declare function CameraPreview({ stream, fallbackImageUrl }: CameraPreviewProps): react_jsx_runtime.JSX.Element | null;
 
 interface ResultViewProps {
     status: RecorderStatus;
@@ -250,6 +307,35 @@ declare function useScreenCapture(overrides?: CaptureSettings): {
     startSharing: () => Promise<void>;
     takeScreenshot: () => Promise<CaptureResult | null>;
     stopSharing: () => void;
+};
+
+/**
+ * Handles getUserMedia (webcam), device enumeration, canvas snapshots,
+ * and stream lifecycle.
+ *
+ * Supports a two-phase flow for camera mode:
+ *   1. **Preview** — `startPreview()` acquires the camera stream so the UI
+ *      can show a live `<video>` and a device picker *before* recording.
+ *   2. **Recording** — `startSharing()` reuses the preview stream (or
+ *      acquires one if preview wasn't started) and sets `isSharing = true`,
+ *      which tells `useCollapse` to begin the capture-upload loop.
+ *
+ * Mirrors the base return shape of `useScreenCapture` (`isSharing`,
+ * `startSharing`, `takeScreenshot`, `stopSharing`) so `useCollapse` can
+ * delegate to either hook interchangeably, plus camera-specific extras.
+ */
+declare function useCameraCapture(overrides?: CaptureSettings): {
+    isSharing: boolean;
+    startSharing: () => Promise<void>;
+    takeScreenshot: () => Promise<CaptureResult | null>;
+    stopSharing: () => void;
+    devices: MediaDeviceInfo[];
+    selectedDeviceId: string | null;
+    selectDevice: (deviceId: string) => Promise<void>;
+    isPreviewing: boolean;
+    previewStream: MediaStream | null;
+    startPreview: () => Promise<void>;
+    stopPreview: () => void;
 };
 
 interface UploaderResult {
@@ -360,8 +446,9 @@ declare function Spinner({ size, color }: SpinnerProps): react_jsx_runtime.JSX.E
 interface BadgeProps {
     status: string;
     variant?: "overlay" | "inline";
+    size?: "sm" | "md" | "lg";
 }
-declare function Badge({ status, variant }: BadgeProps): react_jsx_runtime.JSX.Element;
+declare function Badge({ status, variant, size }: BadgeProps): react_jsx_runtime.JSX.Element;
 
 interface ErrorDisplayProps {
     error: string;
@@ -406,27 +493,49 @@ declare function RecordPageSkeleton(): react_jsx_runtime.JSX.Element;
 
 declare const colors: {
     readonly bg: {
-        readonly body: "#0a0a0a";
-        readonly surface: "#1a1a1a";
-        readonly sunken: "#111";
+        readonly body: "var(--color-bg-body)";
+        readonly panel: "var(--color-bg-panel)";
+        readonly backdrop: "var(--color-modal-backdrop)";
+        readonly surface: "var(--color-bg-surface)";
+        readonly sunken: "var(--color-bg-sunken)";
+        readonly selected: "var(--color-bg-selected)";
     };
     readonly text: {
-        readonly primary: "#fff";
-        readonly secondary: "#888";
-        readonly tertiary: "#666";
-        readonly quaternary: "#555";
-        readonly error: "#fca5a5";
+        readonly primary: "var(--color-text-primary)";
+        readonly inverse: "var(--color-text-inverse)";
+        readonly secondary: "var(--color-text-secondary)";
+        readonly tertiary: "var(--color-text-tertiary)";
+        readonly quaternary: "var(--color-text-quaternary)";
+        readonly error: "var(--color-text-error)";
     };
     readonly border: {
-        readonly default: "#333";
-        readonly hover: "#444";
+        readonly default: "var(--color-border-default)";
+        readonly hover: "var(--color-border-hover)";
+        readonly selected: "var(--color-border-selected)";
+    };
+    readonly icon: {
+        readonly selected: "var(--color-icon-selected)";
+    };
+    readonly spinner: {
+        readonly base: "var(--color-spinner-base)";
+        readonly track: "var(--color-spinner-track)";
+    };
+    readonly skeleton: {
+        readonly bg: "var(--color-skeleton-bg)";
+        readonly shimmer: "var(--color-skeleton-shimmer)";
+    };
+    readonly badge: {
+        readonly primaryBg: "var(--color-badge-primary-bg)";
+        readonly primaryText: "var(--color-badge-primary-text)";
+        readonly overlayBg: "var(--color-badge-overlay-bg)";
+        readonly overlayText: "var(--color-badge-overlay-text)";
     };
     readonly status: {
         readonly success: "#22c55e";
         readonly info: "#3b82f6";
         readonly warning: "#f59e0b";
         readonly danger: "#ef4444";
-        readonly neutral: "#888";
+        readonly neutral: "var(--color-status-neutral)";
     };
 };
 declare const spacing: {
@@ -465,4 +574,4 @@ declare const statusConfig: Record<string, {
     color: string;
 }>;
 
-export { Badge, type BadgeProps, Button, type ButtonProps, type CaptureResult, type CaptureSettings, Card, type CardProps, type CollapseActions, type CollapseCallbacks, type CollapseClient, type CollapseConfig, CollapseProvider, type CollapseProviderProps, CollapseRecorder, type CollapseState, type CreateClientOptions, ErrorDisplay, type ErrorDisplayProps, Gallery, type GalleryProps, GallerySkeleton, PageContainer, type PageContainerProps, ProcessingState, type ProcessingStateProps, RecordPageSkeleton, type RecorderStatus, RecordingControls, type RecordingControlsProps, type ResolvedConfig, ResultView, type ResultViewProps, type RetrySettings, type Route, ScreenPreview, type ScreenPreviewProps, SessionCard, type SessionCardProps, SessionDetail, type SessionDetailProps, SessionDetailSkeleton, Skeleton, type SkeletonProps, Spinner, type SpinnerProps, StatusBar, type StatusBarProps, type TokenEntry, type TokenProvider, type UploadState, type UseGalleryOptions, type UseGallery as UseGalleryReturn, type UseTokenStore, colors, createCollapseClient, fontSize, fontWeight, formatTime, formatTrackedTime, radii, spacing, statusConfig, useCollapse, useGallery, useHashRouter, useScreenCapture, useSession, useSessionTimer, useTokenStore, useUploader };
+export { Badge, type BadgeProps, Button, type ButtonProps, CameraPreview, type CameraPreviewProps, CameraSelector, type CameraSelectorProps, type CameraSettings, type CaptureMode, type CaptureResult, type CaptureSettings, Card, type CardProps, type CollapseActions, type CollapseCallbacks, type CollapseClient, type CollapseConfig, CollapseProvider, type CollapseProviderProps, CollapseRecorder, type CollapseState, type CreateClientOptions, ErrorDisplay, type ErrorDisplayProps, Gallery, type GalleryProps, GallerySkeleton, PageContainer, type PageContainerProps, ProcessingState, type ProcessingStateProps, RecordPageSkeleton, type RecorderStatus, RecordingControls, type RecordingControlsProps, type ResolvedConfig, ResultView, type ResultViewProps, type RetrySettings, type Route, ScreenPreview, type ScreenPreviewProps, SessionCard, type SessionCardProps, SessionDetail, type SessionDetailProps, SessionDetailSkeleton, Skeleton, type SkeletonProps, Spinner, type SpinnerProps, StatusBar, type StatusBarProps, type TokenEntry, type TokenProvider, type UploadState, type UseGalleryOptions, type UseGallery as UseGalleryReturn, type UseTokenStore, colors, createCollapseClient, fontSize, fontWeight, formatTime, formatTrackedTime, radii, spacing, statusConfig, useCameraCapture, useCollapse, useGallery, useHashRouter, useScreenCapture, useSession, useSessionTimer, useTokenStore, useUploader };

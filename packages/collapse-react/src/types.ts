@@ -8,6 +8,20 @@ export type TokenProvider =
   | (() => string)
   | (() => Promise<string>);
 
+// ─── Capture Mode ────────────────────────────────────────
+
+/** Capture source: screen sharing or webcam camera. */
+export type CaptureMode = "screen" | "camera";
+
+// ─── Camera Settings ─────────────────────────────────────
+
+export interface CameraSettings {
+  /** Preferred camera device ID (from enumerateDevices). Omit for default camera. */
+  deviceId?: string;
+  /** Additional getUserMedia video constraints (merged with defaults). */
+  userMediaConstraints?: MediaTrackConstraints;
+}
+
 // ─── Capture Settings ────────────────────────────────────
 
 export interface CaptureSettings {
@@ -21,6 +35,10 @@ export interface CaptureSettings {
   maxHeight?: number;
   /** Override getDisplayMedia constraints (merged with defaults). */
   displayMediaConstraints?: DisplayMediaStreamOptions;
+  /** Capture mode: "screen" (default) or "camera". */
+  mode?: CaptureMode;
+  /** Camera-specific settings. Only used when mode is "camera". */
+  camera?: CameraSettings;
 }
 
 // ─── Retry Settings ──────────────────────────────────────
@@ -118,8 +136,9 @@ export interface CollapseConfig {
 export interface ResolvedConfig {
   token: TokenProvider;
   apiBaseUrl: string;
-  capture: Required<Omit<CaptureSettings, "displayMediaConstraints">> & {
+  capture: Required<Omit<CaptureSettings, "displayMediaConstraints" | "camera">> & {
     displayMediaConstraints?: DisplayMediaStreamOptions;
+    camera: CameraSettings;
   };
   retry: Required<RetrySettings>;
   callbacks: CollapseCallbacks;
@@ -134,9 +153,11 @@ export interface CollapseState {
   status: RecorderStatus;
   /** Whether getDisplayMedia is active. */
   isSharing: boolean;
-  /** Server-tracked seconds (confirmed buckets × 60). */
+  /** True when actively capturing (sharing + pending/active). Convenience for UI logic. */
+  isRecording: boolean;
+  /** Best-known tracked seconds (max of server, upload confirms, and local estimate). */
   trackedSeconds: number;
-  /** Client-interpolated display seconds (smooth ticking). */
+  /** Client-interpolated display seconds (smooth ticking, monotonic). */
   displaySeconds: number;
   /** Number of confirmed screenshots. */
   screenshotCount: number;
@@ -148,14 +169,24 @@ export interface CollapseState {
   videoUrl: string | null;
   /** Error message when status is "error". */
   error: string | null;
+  /** Active capture mode. */
+  captureMode: CaptureMode;
+  /** Available camera devices (populated when mode is "camera"). */
+  availableCameras: MediaDeviceInfo[];
+  /** Currently selected camera device ID. */
+  selectedCameraId: string | null;
+  /** Whether camera is in preview mode (stream live, capture loop not started). */
+  isPreviewing: boolean;
+  /** Live camera MediaStream for rendering in a `<video>` element. Null when not previewing/recording. */
+  previewStream: MediaStream | null;
 }
 
 // ─── Collapse Actions ────────────────────────────────────
 
 export interface CollapseActions {
-  /** Start screen sharing and begin capturing. */
+  /** Start screen sharing (or camera) and begin capturing. */
   startSharing: () => Promise<void>;
-  /** Stop screen share without stopping session (auto-pauses). */
+  /** Stop screen share (or camera) without stopping session (auto-pauses). */
   stopSharing: () => void;
   /** Pause the session. */
   pause: () => Promise<void>;
@@ -163,4 +194,10 @@ export interface CollapseActions {
   resume: () => Promise<void>;
   /** Stop the session (triggers compilation). Optionally name the timelapse before stopping. */
   stop: (options?: { name?: string }) => Promise<void>;
+  /** Select a camera device by ID. Only effective when captureMode is "camera". */
+  selectCamera: (deviceId: string) => void;
+  /** Start camera preview without recording. Acquires the stream so the UI can show a live video. */
+  startPreview: () => Promise<void>;
+  /** Stop camera preview (releases stream). */
+  stopPreview: () => void;
 }

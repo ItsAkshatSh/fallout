@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useCollapseContext } from "../CollapseProvider.js";
 import { useScreenCapture } from "./useScreenCapture.js";
+import { useCameraCapture } from "./useCameraCapture.js";
 import { useUploader } from "./useUploader.js";
 import { useSession } from "./useSession.js";
 import { useSessionTimer } from "./useSessionTimer.js";
@@ -11,28 +12,50 @@ import type { CollapseState, CollapseActions, RecorderStatus } from "../types.js
  * Composes all lower-level hooks and orchestrates the capture-upload loop.
  */
 export function useCollapse(): { state: CollapseState; actions: CollapseActions } {
-  const { config } = useCollapseContext();
+  const { config, client } = useCollapseContext();
   const callbacksRef = useRef(config.callbacks);
   callbacksRef.current = config.callbacks;
 
+  const captureMode = config.capture.mode;
+
   const session = useSession();
-  const capture = useScreenCapture();
+  const screenCapture = useScreenCapture();
+  const cameraCapture = useCameraCapture();
+  // Delegate to the active capture source — both hooks are always called
+  // (React rules of hooks) but only the active one's methods are invoked.
+  const capture = captureMode === "camera" ? cameraCapture : screenCapture;
   const uploader = useUploader();
-  const displaySeconds = useSessionTimer(
+
+  // Estimate local tracked seconds from upload count when server hasn't caught up.
+  // Server uses (count(distinct minute_buckets) - 1) * 60, so the first bucket
+  // reports 0. Locally we can estimate: (completed - 1) * intervalSeconds once
+  // we have ≥2 uploads, giving the user an immediate non-zero value.
+  const intervalSeconds = Math.floor(config.capture.intervalMs / 1000);
+  const localEstimate =
+    uploader.uploads.completed >= 2
+      ? (uploader.uploads.completed - 1) * intervalSeconds
+      : 0;
+  const bestTrackedSeconds = Math.max(
     session.trackedSeconds,
-    session.status === "active" && capture.isSharing,
+    uploader.trackedSeconds,
+    localEstimate,
+  );
+
+  const displaySeconds = useSessionTimer(
+    bestTrackedSeconds,
+    capture.isSharing && (session.status === "active" || session.status === "pending"),
   );
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const capturingRef = useRef(false);
   const prevStatusRef = useRef<RecorderStatus>(session.status);
 
-  // Sync tracked seconds from uploader to session
+  // Sync best tracked seconds to session
   useEffect(() => {
-    if (uploader.trackedSeconds > 0) {
-      session.updateTrackedSeconds(uploader.trackedSeconds);
+    if (bestTrackedSeconds > session.trackedSeconds) {
+      session.updateTrackedSeconds(bestTrackedSeconds);
     }
-  }, [uploader.trackedSeconds, session.updateTrackedSeconds]);
+  }, [bestTrackedSeconds, session.trackedSeconds, session.updateTrackedSeconds]);
 
   // Fire onStatusChange callback
   useEffect(() => {
@@ -100,15 +123,22 @@ export function useCollapse(): { state: CollapseState; actions: CollapseActions 
     }
   }, [capture.isSharing, session.status, session.resume]);
 
-  // Auto-pause when screen sharing ends unexpectedly
+  // Auto-pause when screen sharing ends unexpectedly (mid-session loss)
+  // OR on mount when session is active but stream was lost (page reload).
+  // capturingRef.current distinguishes mid-session loss from mount recovery,
+  // but both cases should auto-pause so the server doesn't stay active with no captures.
   useEffect(() => {
-    if (!capture.isSharing && session.status === "active" && capturingRef.current) {
-      capturingRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    if (!capture.isSharing && session.status === "active") {
+      if (capturingRef.current) {
+        // Mid-session: stream ended while capturing
+        capturingRef.current = false;
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
+        callbacksRef.current.onShareStop?.();
       }
-      callbacksRef.current.onShareStop?.();
+      // Both cases: pause the server session so it doesn't accumulate dead time
       session.pause().catch(() => {});
     }
   }, [capture.isSharing, session.status, session.pause]);
@@ -134,17 +164,20 @@ export function useCollapse(): { state: CollapseState; actions: CollapseActions 
     } catch (err) {
       const e = err instanceof Error ? err : new Error(String(err));
       let message: string;
+      const isCamera = captureMode === "camera";
       if (e.name === "NotAllowedError") {
-        message = "Screen sharing permission was denied. Please try again and select a screen to share.";
+        message = isCamera
+          ? "Camera permission was denied. Please allow camera access and try again."
+          : "Screen sharing permission was denied. Please try again and select a screen to share.";
       } else if (e.name === "AbortError") {
-        message = "Screen sharing was cancelled.";
+        message = isCamera ? "Camera access was cancelled." : "Screen sharing was cancelled.";
       } else {
-        message = e.message || "Failed to start screen sharing.";
+        message = e.message || (isCamera ? "Failed to start camera." : "Failed to start screen sharing.");
       }
       callbacksRef.current.onError?.(new Error(message), "startSharing");
       session.setError(message);
     }
-  }, [capture.startSharing, session]);
+  }, [capture.startSharing, session, captureMode]);
 
   const stopSharing = useCallback(() => {
     capture.stopSharing();
@@ -180,16 +213,38 @@ export function useCollapse(): { state: CollapseState; actions: CollapseActions 
     });
   }, [session.stop, session.trackedSeconds, session.totalActiveSeconds, capture.stopSharing]);
 
+  // Fetch video URL when session reaches "complete"
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (session.status !== "complete") return;
+    let cancelled = false;
+    client.getVideo().then((data: { videoUrl: string }) => {
+      if (!cancelled) {
+        setVideoUrl(data.videoUrl);
+        callbacksRef.current.onComplete?.({ videoUrl: data.videoUrl });
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [session.status, client]);
+
+  const isRecording = capture.isSharing && (session.status === "active" || session.status === "pending");
+
   const state: CollapseState = {
     status: session.status,
     isSharing: capture.isSharing,
-    trackedSeconds: session.trackedSeconds,
+    isRecording,
+    trackedSeconds: bestTrackedSeconds,
     displaySeconds,
-    screenshotCount: session.screenshotCount,
+    screenshotCount: Math.max(session.screenshotCount, uploader.uploads.completed),
     uploads: uploader.uploads,
     lastScreenshotUrl: uploader.lastScreenshotUrl,
-    videoUrl: null,
+    videoUrl,
     error: session.error,
+    captureMode,
+    availableCameras: cameraCapture.devices,
+    selectedCameraId: cameraCapture.selectedDeviceId,
+    isPreviewing: cameraCapture.isPreviewing,
+    previewStream: cameraCapture.previewStream,
   };
 
   const actions: CollapseActions = {
@@ -198,6 +253,9 @@ export function useCollapse(): { state: CollapseState; actions: CollapseActions 
     pause,
     resume,
     stop,
+    selectCamera: cameraCapture.selectDevice,
+    startPreview: cameraCapture.startPreview,
+    stopPreview: cameraCapture.stopPreview,
   };
 
   return { state, actions };
