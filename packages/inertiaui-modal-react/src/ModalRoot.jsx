@@ -706,9 +706,29 @@ export const ModalRoot = ({ children }) => {
     return config
   }
 
+  // On 409 (version mismatch after deploy), reload the current page instead of
+  // letting Axios error bubble up — the user stays on their page with fresh assets.
+  // Scoped to modal requests only (X-InertiaUI-Modal header) to avoid intercepting
+  // unrelated Axios 409s (e.g. Collapse API conflict responses).
+  const axiosResponseInterceptor = [
+    (response) => response,
+    (error) => {
+      const isModalRequest = error?.config?.headers?.['X-InertiaUI-Modal']
+      if (isModalRequest && error?.response?.status === 409 && error.response.headers['x-inertia-location']) {
+        window.location.reload()
+        return new Promise(() => {}) // Never resolve — page is reloading
+      }
+      return Promise.reject(error)
+    },
+  ]
+
   useEffect(() => {
-    Axios.interceptors.request.use(axiosRequestInterceptor)
-    return () => Axios.interceptors.request.eject(axiosRequestInterceptor)
+    const reqId = Axios.interceptors.request.use(axiosRequestInterceptor)
+    const resId = Axios.interceptors.response.use(...axiosResponseInterceptor)
+    return () => {
+      Axios.interceptors.request.eject(reqId)
+      Axios.interceptors.response.eject(resId)
+    }
   }, [])
 
   const previousModalRef = useRef()
