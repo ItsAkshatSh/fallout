@@ -19,6 +19,7 @@ uniform float uDotSize;
 uniform float uHalftoneOpacity;
 uniform float uBleed;
 uniform vec2 uMouse; // normalized -1..1
+uniform float uMouseStrength; // 0=no effect, 1=full effect
 uniform float uContain; // 1=object-contain, 0=object-cover
 
 in vec2 vUv;
@@ -71,20 +72,20 @@ vec2 fitUv(vec2 uv) {
 }
 
 // Halftone grid in canvas pixel space for consistent dot sizing
-vec2 toGridUV(vec2 uv, float angleDeg) {
-  return rot(angleDeg) * (uv * uResolution) / uPixelSize;
+vec2 toGridUV(vec2 uv, float angleDeg, float ps) {
+  return rot(angleDeg) * (uv * uResolution) / ps;
 }
 
 // Returns image UV for the center of the halftone cell at this canvas position
-vec2 getCellCenterUV(vec2 uv, float angleDeg) {
-  vec2 gridUV = toGridUV(uv, angleDeg);
+vec2 getCellCenterUV(vec2 uv, float angleDeg, float ps) {
+  vec2 gridUV = toGridUV(uv, angleDeg, ps);
   vec2 cellCenter = floor(gridUV) + 0.5;
-  vec2 centerScreen = rot(-angleDeg) * cellCenter * uPixelSize;
+  vec2 centerScreen = rot(-angleDeg) * cellCenter * ps;
   return fitUv(centerScreen / uResolution);
 }
 
-float halftoneDot(vec2 uv, float angleDeg, float coverage) {
-  vec2 gridUV = toGridUV(uv, angleDeg);
+float halftoneDot(vec2 uv, float angleDeg, float coverage, float ps) {
+  vec2 gridUV = toGridUV(uv, angleDeg, ps);
   vec2 gv = fract(gridUV) - 0.5;
   float r = uDotSize * sqrt(clamp(coverage, 0.0, 1.0)) + uBleed;
   float aa = fwidth(length(gv));
@@ -107,20 +108,26 @@ vec4 RGBtoCMYK(vec3 rgb) {
 void main() {
   if (texture(uTexture, fitUv(vUv)).a < 0.01) discard;
 
-  vec2 uvC = getCellCenterUV(vUv, ANGLE_C);
-  vec2 uvM = getCellCenterUV(vUv, ANGLE_M);
-  vec2 uvY = getCellCenterUV(vUv, ANGLE_Y);
-  vec2 uvK = getCellCenterUV(vUv, ANGLE_K);
+  vec2 fragNDC = vUv * 2.0 - 1.0;
+  vec2 mouseDelta = fragNDC - uMouse;
+  mouseDelta.x *= uResolution.x / uResolution.y;
+  float proximity = smoothstep(0.55, 0.0, length(mouseDelta)) * uMouseStrength;
+  float ps = uPixelSize * (1.0 + proximity * 2.5);
+
+  vec2 uvC = getCellCenterUV(vUv, ANGLE_C, ps);
+  vec2 uvM = getCellCenterUV(vUv, ANGLE_M, ps);
+  vec2 uvY = getCellCenterUV(vUv, ANGLE_Y, ps);
+  vec2 uvK = getCellCenterUV(vUv, ANGLE_K, ps);
 
   vec4 cmykC = RGBtoCMYK(sampleForCMYK(uvC).rgb);
   vec4 cmykM = RGBtoCMYK(sampleForCMYK(uvM).rgb);
   vec4 cmykY = RGBtoCMYK(sampleForCMYK(uvY).rgb);
   vec4 cmykK = RGBtoCMYK(sampleForCMYK(uvK).rgb);
 
-  float dotC = halftoneDot(vUv, ANGLE_C, cmykC.x);
-  float dotM = halftoneDot(vUv, ANGLE_M, cmykM.y);
-  float dotY = halftoneDot(vUv, ANGLE_Y, cmykY.z);
-  float dotK = halftoneDot(vUv, ANGLE_K, cmykK.w);
+  float dotC = halftoneDot(vUv, ANGLE_C, cmykC.x, ps);
+  float dotM = halftoneDot(vUv, ANGLE_M, cmykM.y, ps);
+  float dotY = halftoneDot(vUv, ANGLE_Y, cmykY.z, ps);
+  float dotK = halftoneDot(vUv, ANGLE_K, cmykK.w, ps);
 
   vec3 color = vec3(1.0);
   color.r *= (1.0 - CYAN_STRENGTH * dotC);
@@ -164,10 +171,11 @@ type Props = {
   background?: string // tailwind bg class, e.g. 'bg-blue'. Pass '' for none.
   className?: string
   bleed?: number // fixed dot radius offset, causes dots to overlap adjacent cells (default 0)
+  mouseEffect?: boolean
 }
 
 export const HalftoneBg = forwardRef<HTMLCanvasElement, Props>(
-  ({ src, pixelSize = 8, dotSize = 0.7, halftoneOpacity = 1.0, objectFit = 'cover', background = 'bg-blue', className, bleed = 0 }, ref) => {
+  ({ src, pixelSize = 4, dotSize = 0.7, halftoneOpacity = 1.0, objectFit = 'cover', background = 'bg-blue', className, bleed = 0, mouseEffect = false }, ref) => {
     const innerRef = useRef<HTMLCanvasElement>(null)
 
     const setRef = (el: HTMLCanvasElement | null) => {
@@ -207,6 +215,7 @@ export const HalftoneBg = forwardRef<HTMLCanvasElement, Props>(
       const uHOp     = gl.getUniformLocation(program, 'uHalftoneOpacity')
       const uBleedLoc = gl.getUniformLocation(program, 'uBleed')
       const uMouse    = gl.getUniformLocation(program, 'uMouse')
+      const uMouseStrengthLoc = gl.getUniformLocation(program, 'uMouseStrength')
       const uContain = gl.getUniformLocation(program, 'uContain')
 
       gl.enable(gl.BLEND)
@@ -220,7 +229,7 @@ export const HalftoneBg = forwardRef<HTMLCanvasElement, Props>(
       window.addEventListener('mousemove', onMouseMove)
 
 
-      let animId: number
+      let animId: number | null = null
 
       function render() {
         if (!texture) return
@@ -236,20 +245,28 @@ export const HalftoneBg = forwardRef<HTMLCanvasElement, Props>(
         gl!.uniform1i(uTex, 0)
         gl!.uniform2f(uRes, canvas!.width, canvas!.height)
         gl!.uniform1f(uImgAR, imageAspect)
-        gl!.uniform1f(uPx, pixelSize)
+        gl!.uniform1f(uPx, pixelSize * devicePixelRatio)
         gl!.uniform1f(uDot, dotSize)
         gl!.uniform1f(uHOp, halftoneOpacity)
         gl!.uniform1f(uBleedLoc, bleed)
         gl!.uniform2f(uMouse, mouseX, mouseY)
+        gl!.uniform1f(uMouseStrengthLoc, mouseEffect ? 1.0 : 0.0)
         gl!.uniform1f(uContain, objectFit === 'contain' ? 1.0 : 0.0)
         gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
       }
 
+      // Only loop via RAF when mouseEffect is on; otherwise render once on load/resize
+      let visible = false
       function loop() {
-        render()
+        if (visible) render()
         animId = requestAnimationFrame(loop)
       }
-      loop()
+      if (mouseEffect) loop()
+
+      const io = new IntersectionObserver((entries) => {
+        visible = entries[0].isIntersecting
+      }, { threshold: 0 })
+      io.observe(canvas)
 
       const img = new Image()
       img.onload = () => {
@@ -262,24 +279,27 @@ export const HalftoneBg = forwardRef<HTMLCanvasElement, Props>(
         gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR)
         gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE)
         gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE)
+        if (!mouseEffect) render()
       }
       img.src = src
 
       const ro = new ResizeObserver(() => {
         canvas.width = canvas.clientWidth * devicePixelRatio
         canvas.height = canvas.clientHeight * devicePixelRatio
+        if (!mouseEffect) render()
       })
       ro.observe(canvas)
 
       return () => {
-        cancelAnimationFrame(animId)
+        if (animId !== null) cancelAnimationFrame(animId)
         window.removeEventListener('mousemove', onMouseMove)
         ro.disconnect()
+        io.disconnect()
         gl.deleteProgram(program)
         gl.deleteBuffer(quad)
         if (texture) gl.deleteTexture(texture)
       }
-    }, [src, pixelSize, dotSize, halftoneOpacity, objectFit, bleed])
+    }, [src, pixelSize, dotSize, halftoneOpacity, objectFit, bleed, mouseEffect])
 
     return <canvas ref={setRef} className={`${background} ${className ?? ''}`} />
   }
