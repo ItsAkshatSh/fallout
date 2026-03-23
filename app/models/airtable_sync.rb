@@ -51,12 +51,12 @@ class AirtableSync < ApplicationRecord
     sync_with_records!(klass, records, no_upload:, log_prefix: "Airtable sync")
   end
 
-  def self.batch_sync!(table_id, records, sync_id, mappings, no_upload: false, batch_index: nil, base_id: nil)
+  def self.batch_sync!(table_id, records, sync_id, mappings, no_upload: false, batch_index: nil, base_id: nil, preloaded: nil)
     total = records.size
     Rails.logger.info("Airtable batch sync: Building CSV for #{total} records...")
 
     Rails.logger.info("Airtable batch sync: Building fields for #{total} records in parallel...")
-    rows = parallel_map(records) { |record| build_airtable_fields(record, mappings) }
+    rows = parallel_map(records) { |record| build_airtable_fields(record, mappings, preloaded) }
 
     csv_string = CSV.generate do |csv|
       csv << mappings.keys
@@ -90,8 +90,8 @@ class AirtableSync < ApplicationRecord
     raise "Airtable batch sync failed with status #{response.status}: #{response.body}" if response.status < 200 || response.status >= 300
   end
 
-  def self.individual_sync!(table_id, record, mappings, _old_airtable_id, base_id: nil)
-    fields = build_airtable_fields(record, mappings)
+  def self.individual_sync!(table_id, record, mappings, _old_airtable_id, base_id: nil, preloaded: nil)
+    fields = build_airtable_fields(record, mappings, preloaded)
     upload_or_create!(table_id, record, fields, base_id: base_id)
   end
 
@@ -161,6 +161,10 @@ class AirtableSync < ApplicationRecord
 
       Rails.logger.info("#{log_prefix}: Found #{records.size} #{klass.name} records to sync")
 
+      ctx[:preloaded] = if klass.respond_to?(:airtable_sync_preload)
+        klass.airtable_sync_preload(records)
+      end
+
       airtable_ids = if ctx[:sync_id].present?
         perform_batch_sync!(ctx, records, no_upload:, log_prefix:)
         []
@@ -192,10 +196,10 @@ class AirtableSync < ApplicationRecord
         batches = build_equal_batches(records, batch_size)
         batches.each_with_index do |batch_records, index|
           Rails.logger.info("#{log_prefix}: #{klass.name} batch #{index + 1}/#{batches.size} (#{batch_records.size} records)")
-          batch_sync!(ctx[:table_id], batch_records, ctx[:sync_id], ctx[:mappings], no_upload:, batch_index: index + 1, base_id: ctx[:base_id])
+          batch_sync!(ctx[:table_id], batch_records, ctx[:sync_id], ctx[:mappings], no_upload:, batch_index: index + 1, base_id: ctx[:base_id], preloaded: ctx[:preloaded])
         end
       else
-        batch_sync!(ctx[:table_id], records, ctx[:sync_id], ctx[:mappings], no_upload:, base_id: ctx[:base_id])
+        batch_sync!(ctx[:table_id], records, ctx[:sync_id], ctx[:mappings], no_upload:, base_id: ctx[:base_id], preloaded: ctx[:preloaded])
       end
     end
 
@@ -204,7 +208,7 @@ class AirtableSync < ApplicationRecord
       Rails.logger.info("#{log_prefix}: Processing #{total} #{ctx[:klass].name} records in parallel...")
 
       airtable_ids = parallel_map(records) do |record|
-        individual_sync!(ctx[:table_id], record, ctx[:mappings], nil, base_id: ctx[:base_id])
+        individual_sync!(ctx[:table_id], record, ctx[:mappings], nil, base_id: ctx[:base_id], preloaded: ctx[:preloaded])
       end
 
       Rails.logger.info("#{log_prefix}: Finished #{ctx[:klass].name} (#{total} records)")
@@ -229,7 +233,7 @@ class AirtableSync < ApplicationRecord
     end
 
     def all_records(klass, limit)
-      query = klass.all
+      query = apply_sync_scope(klass, klass.all)
       query = query.limit(limit) if limit.present?
       query.to_a
     end
@@ -244,9 +248,13 @@ class AirtableSync < ApplicationRecord
 
       where_sql = "airtable_syncs.id IS NULL OR #{table_name}.updated_at > airtable_syncs.last_synced_at"
 
-      records_query = klass.joins(join_sql).where(where_sql)
+      records_query = apply_sync_scope(klass, klass.joins(join_sql).where(where_sql))
       records_query = records_query.limit(limit) if limit.present?
       records_query.to_a
+    end
+
+    def apply_sync_scope(klass, query)
+      klass.respond_to?(:airtable_sync_scope) ? klass.airtable_sync_scope(query) : query
     end
 
     def parallel_map(items, threads: SYNC_THREAD_COUNT, &)
@@ -258,10 +266,10 @@ class AirtableSync < ApplicationRecord
            .flat_map(&:value)
     end
 
-    def build_airtable_fields(record, field_mappings)
+    def build_airtable_fields(record, field_mappings, preloaded = nil)
       field_mappings.transform_values do |mapping|
         if mapping.is_a?(Proc)
-          mapping.call(record)
+          mapping.arity == 1 ? mapping.call(record) : mapping.call(record, preloaded)
         else
           record.send(mapping)
         end

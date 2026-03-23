@@ -272,6 +272,17 @@ class User < ApplicationRecord
     "M1Rx186e"
   end
 
+  def self.airtable_sync_scope(query)
+    query.includes(:latest_locatable_visit)
+  end
+
+  def self.airtable_sync_preload(records)
+    user_ids = records.map(&:id)
+    {
+      first_project_created_at: Project.kept.where(user_id: user_ids).group(:user_id).minimum(:created_at)
+    }
+  end
+
   def self.airtable_sync_field_mappings
     {
       "ID" => :id,
@@ -284,7 +295,7 @@ class User < ApplicationRecord
               u.latest_locatable_visit&.country
         User.normalize_country_code(raw)
       },
-      "First Project Created At" => ->(u) { u.projects.kept.minimum(:created_at)&.iso8601 },
+      "First Project Created At" => ->(u, pre) { pre[:first_project_created_at][u.id]&.iso8601 },
       "Created At" => ->(u) { u.created_at&.iso8601 },
       "Email Verified" => ->(u) { !u.trial? }
     }
