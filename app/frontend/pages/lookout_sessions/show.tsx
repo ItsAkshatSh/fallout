@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { router } from '@inertiajs/react'
+import { router, Link } from '@inertiajs/react'
 import { LookoutProvider, useLookout, formatTime } from '@lookout/react'
 import type { LookoutCallbacks } from '@lookout/react'
 import Button from '@/components/shared/Button'
@@ -74,9 +74,9 @@ function LookoutSessionShow({
           <>
             <div className="p-6 border-b border-dark-brown flex items-center justify-between">
               <h1 className="font-bold text-2xl uppercase tracking-wide text-dark-brown">Lookout Recording</h1>
-              <a href={return_to || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
+              <Link href={return_to || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
                 Back to Path
-              </a>
+              </Link>
             </div>
             <div className="flex flex-col items-center gap-6 p-12">
               <p className="text-dark-brown text-lg font-bold">How would you like to record?</p>
@@ -204,9 +204,9 @@ function RecordingHeader({
         </h1>
       </div>
       {canLeave && (
-        <a href={returnTo || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
+        <Link href={returnTo || '/path'} className="text-dark-brown text-sm underline hover:no-underline">
           Back to Path
-        </a>
+        </Link>
       )}
     </div>
   )

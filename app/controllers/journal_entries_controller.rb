@@ -93,12 +93,24 @@ class JournalEntriesController < ApplicationController
       end
     end
 
-    # Redirect to path when created from the journal modal so it closes and the path updates
-    destination = params[:return_to] == "path" ? path_path : project_path(@project)
-    redirect_to destination, notice: "Journal created."
+    critter = maybe_award_critter(@journal_entry)
+
+    if critter
+      redirect_to critter_path(critter)
+    else
+      # Redirect to path when created from the journal modal so it closes and the path updates
+      destination = params[:return_to] == "path" ? path_path : project_path(@project)
+      redirect_to destination, notice: "Journal created."
+    end
   end
 
   private
+
+  def maybe_award_critter(journal_entry)
+    return nil unless current_user.can_earn_critter?
+
+    current_user.critters.create!(variant: Critter::VARIANTS.sample, journal_entry: journal_entry)
+  end
 
   # Strip owner PII and internal fields before exposing to frontend
   def safe_timelapse_attrs(timelapse)

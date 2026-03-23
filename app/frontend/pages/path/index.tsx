@@ -69,6 +69,7 @@ export default function PathIndex() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
+
     if (params.get('open') === 'journal') {
       const projectId = params.get('project_id')
       params.delete('open')
@@ -139,12 +140,18 @@ export default function PathIndex() {
         </Tooltip>
         <Tooltip>
           <TooltipTrigger>
-            <button
-              className="col-span-2 -mt-4"
-              onClick={() => notify('alert', "The clearing isn't open yet. Check back later!")}
-            >
-              <img src="/icon/clearing.webp" alt="Clearing" className="cursor-pointer w-20 xs:w-50" />
-            </button>
+            {!authUser?.is_trial ? (
+              <Link href="/clearing" className="col-span-2 -mt-4">
+                <img src="/icon/clearing.webp" alt="Clearing" className="cursor-pointer w-20 xs:w-50" />
+              </Link>
+            ) : (
+              <button
+                className="col-span-2 -mt-4"
+                onClick={() => notify('alert', 'You need to verify your account before continuing!')}
+              >
+                <img src="/icon/clearing.webp" alt="Clearing" className="cursor-pointer w-20 xs:w-50" />
+              </button>
+            )}
           </TooltipTrigger>
           <TooltipContent>Clearing</TooltipContent>
         </Tooltip>

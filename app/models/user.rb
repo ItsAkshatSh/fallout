@@ -52,6 +52,7 @@ class User < ApplicationRecord
   has_many :mail_messages, dependent: :destroy
   has_many :authored_mail_messages, class_name: "MailMessage", foreign_key: :author_id, dependent: :nullify, inverse_of: :author
   has_many :mail_interactions, dependent: :destroy
+  has_many :critters, dependent: :destroy
 
   encrypts :hca_token
   encrypts :lapse_token
@@ -300,6 +301,10 @@ class User < ApplicationRecord
       "Created At" => ->(u) { u.created_at&.iso8601 },
       "Email Verified" => ->(u) { !u.trial? }
     }
+  end
+
+  def can_earn_critter?
+    !trial?
   end
 
   def needs_onboarding?

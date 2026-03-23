@@ -31,6 +31,7 @@ class JournalEntry < ApplicationRecord
   has_many :recordings, dependent: :destroy
   has_many :lapse_timelapses, through: :recordings, source: :recordable, source_type: "LapseTimelapse"
   has_many :you_tube_videos, through: :recordings, source: :recordable, source_type: "YouTubeVideo"
+  has_one :critter, dependent: :nullify
   has_many_attached :images
 
   validate :user_must_own_project

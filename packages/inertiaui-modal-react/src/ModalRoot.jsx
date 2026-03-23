@@ -710,6 +710,10 @@ export const ModalRoot = ({ children }) => {
   // letting Axios error bubble up — the user stays on their page with fresh assets.
   // Scoped to modal requests only (X-InertiaUI-Modal header) to avoid intercepting
   // unrelated Axios 409s (e.g. Collapse API conflict responses).
+  // On 409 (version mismatch after deploy), reload the current page instead of
+  // letting Axios error bubble up — the user stays on their page with fresh assets.
+  // Scoped to modal requests only (X-InertiaUI-Modal header) to avoid intercepting
+  // unrelated Axios 409s (e.g. Collapse API conflict responses).
   const axiosResponseInterceptor = [
     (response) => response,
     (error) => {

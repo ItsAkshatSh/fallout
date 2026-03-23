@@ -150,6 +150,9 @@ Rails.application.routes.draw do
 
   get "path" => "path#index", as: :path
 
+  resources :critters, only: [ :show, :update ], path: "spin" # Gacha spin reveal page
+  get "clearing" => "clearing#index", as: :clearing
+
   resources :mails, only: [ :index, :show ], controller: "mails" do
     post :dismiss, on: :member
     post :read_all, on: :collection
