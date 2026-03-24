@@ -25,6 +25,7 @@ type PageProps = {
   }
   has_projects: boolean
   journal_entry_count: number
+  critter_variants: (string | null)[]
 }
 
 export default function PathIndex() {
@@ -32,6 +33,7 @@ export default function PathIndex() {
     user,
     has_projects,
     journal_entry_count,
+    critter_variants,
     has_unread_mail,
     auth: { user: authUser },
     sign_in_path,
@@ -50,9 +52,15 @@ export default function PathIndex() {
   const pathNodes = useMemo(
     () =>
       Array.from({ length: 60 }, (_, i) => (
-        <PathNode key={i} index={i} hasProjects={has_projects} journalEntryCount={journal_entry_count} />
+        <PathNode
+          key={i}
+          index={i}
+          hasProjects={has_projects}
+          journalEntryCount={journal_entry_count}
+          critterVariant={i >= 1 ? critter_variants[i - 1] ?? undefined : undefined}
+        />
       )),
-    [has_projects, journal_entry_count],
+    [has_projects, journal_entry_count, critter_variants],
   )
 
   useEffect(() => {

@@ -8,17 +8,20 @@ import { notify } from '@/lib/notifications'
 import type { SharedProps } from '@/types'
 
 const BILLBOARD_IMAGES = ['/path/1.webp', '/path/2.webp', '/path/3.webp']
+const CRITTER_MARGIN_BOTTOM = ['mb-41', 'mb-40', 'mb-28']
 
 export default function PathNode({
   index,
   interactive = true,
   hasProjects = false,
   journalEntryCount = 0,
+  critterVariant,
 }: {
   index: number
   interactive?: boolean
   hasProjects?: boolean
   journalEntryCount?: number
+  critterVariant?: string
 }) {
   const activeIndex = hasProjects ? journalEntryCount + 1 : 0
   const state: 'completed' | 'active' | 'locked' =
@@ -53,14 +56,24 @@ export default function PathNode({
   )
 
   const billboardImage = (
-    <img
-      src={BILLBOARD_IMAGES[index % BILLBOARD_IMAGES.length]}
-      fetchPriority="high"
-      style={{
-        width: '100%',
-        display: 'block',
-      }}
-    />
+    <div className="relative">
+      <img
+        src={BILLBOARD_IMAGES[index % BILLBOARD_IMAGES.length]}
+        fetchPriority="high"
+        style={{
+          width: '100%',
+          display: 'block',
+        }}
+      />
+      {critterVariant && state === 'completed' && (
+        <img
+          src={`/critters/${critterVariant}.webp`}
+          alt={critterVariant}
+          className={`absolute inset-0 m-auto ${CRITTER_MARGIN_BOTTOM[index % CRITTER_MARGIN_BOTTOM.length]} max-w-42`}
+          style={{ imageRendering: 'pixelated' }}
+        />
+      )}
+    </div>
   )
 
   const content = (
