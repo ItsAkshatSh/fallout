@@ -1,21 +1,58 @@
-import { useState } from 'react'
-import { router, Link } from '@inertiajs/react'
-import { Modal } from '@inertiaui/modal-react'
-import Frame from '@/components/shared/Frame'
+import { useState, useMemo } from 'react'
+import { Modal, ModalLink } from '@inertiaui/modal-react'
+import { BookOpenIcon, ClockIcon } from '@heroicons/react/16/solid'
+import BookLayout from '@/components/shared/BookLayout'
 import Button from '@/components/shared/Button'
-import Input from '@/components/shared/Input'
-import { notify } from '@/lib/notifications'
-import type { ProjectDetail, JournalEntryCard, CollaboratorInfo, PendingInvite } from '@/types'
-import { usePage } from '@inertiajs/react'
-import type { SharedProps } from '@/types'
+import InlineUser from '@/components/shared/InlineUser'
+import TimeAgo from '@/components/shared/TimeAgo'
+import Timeline from '@/components/shared/Timeline'
+import type { ProjectDetail, JournalEntryCard, CollaboratorInfo, ShipEvent } from '@/types'
 
-function isSafeUrl(url: string | null): boolean {
-  if (!url) return false
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
+function formatTime(seconds: number): string {
+  if (seconds === 0) return '0min'
+  const hrs = Math.floor(seconds / 3600)
+  const mins = Math.floor((seconds % 3600) / 60)
+  if (hrs === 0) return `${mins}min`
+  return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`
+}
+
+function formatByLine(project: ProjectDetail, collaborators: CollaboratorInfo[]) {
+  const people = [
+    { avatar: project.user_avatar, display_name: project.user_display_name },
+    ...collaborators.map((c) => ({ avatar: c.avatar, display_name: c.display_name })),
+  ]
+
+  return (
+    <p className="text-sm text-dark-brown">
+      By{' '}
+      {people.map((p, i) => (
+        <span key={i}>
+          {i > 0 && i === people.length - 1 && ' and '}
+          {i > 0 && i < people.length - 1 && ', '}
+          <InlineUser avatar={p.avatar} display_name={p.display_name} />
+        </span>
+      ))}
+    </p>
+  )
+}
+
+type TimelineEvent =
+  | { type: 'journal'; entry: JournalEntryCard; date: number; iso: string }
+  | { type: 'ship'; ship: ShipEvent; date: number; iso: string }
+  | { type: 'created'; date: number; iso: string }
+
+function shipStatusLabel(status: string): string {
+  switch (status) {
+    case 'pending':
+      return 'submitted for review'
+    case 'approved':
+      return 'was approved'
+    case 'returned':
+      return 'was returned for changes'
+    case 'rejected':
+      return 'was rejected'
+    default:
+      return status
   }
 }
 
@@ -23,212 +60,255 @@ export default function ProjectsShow({
   project,
   journal_entries,
   collaborators,
-  pending_invites,
+  ships,
   can,
   is_modal,
 }: {
   project: ProjectDetail
   journal_entries: JournalEntryCard[]
   collaborators: CollaboratorInfo[]
-  pending_invites: PendingInvite[]
+  ships: ShipEvent[]
   can: { update: boolean; destroy: boolean; manage_collaborators: boolean; create_journal_entry: boolean }
   is_modal?: boolean
 }) {
-  const { errors } = usePage<SharedProps>().props
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviting, setInviting] = useState(false)
+  const [rightTab, setRightTab] = useState<'timeline' | 'journal'>('timeline')
 
-  function deleteProject() {
-    if (confirm('Are you sure?')) {
-      router.delete(`/projects/${project.id}`, {
-        onError: () => notify('alert', 'Failed to delete project. Please try again.'),
-      })
-    }
-  }
-
-  function sendInvite(e: React.FormEvent) {
-    e.preventDefault()
-    if (!inviteEmail.trim() || inviting) return
-    setInviting(true)
-    router.post(
-      `/projects/${project.id}/collaboration_invites`,
-      { email: inviteEmail.trim() },
+  const timelineEvents = useMemo<TimelineEvent[]>(() => {
+    const events: TimelineEvent[] = [
+      ...journal_entries.map((entry) => ({
+        type: 'journal' as const,
+        entry,
+        date: new Date(entry.created_at_iso).getTime(),
+        iso: entry.created_at_iso,
+      })),
+      ...ships.map((ship) => ({
+        type: 'ship' as const,
+        ship,
+        date: new Date(ship.created_at_iso).getTime(),
+        iso: ship.created_at_iso,
+      })),
       {
-        onSuccess: () => setInviteEmail(''),
-        onError: () => notify('alert', 'Failed to send invite.'),
-        onFinish: () => setInviting(false),
+        type: 'created' as const,
+        date: new Date(project.created_at_iso).getTime(),
+        iso: project.created_at_iso,
       },
-    )
+    ]
+    events.sort((a, b) => b.date - a.date)
+    return events
+  }, [journal_entries, ships, project.created_at_iso])
+
+  const journalByDate = useMemo(() => {
+    const groups: { dateKey: string; entries: JournalEntryCard[] }[] = []
+    const map = new Map<string, JournalEntryCard[]>()
+
+    for (const entry of journal_entries) {
+      const d = new Date(entry.created_at_iso)
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      if (!map.has(dateKey)) {
+        const arr: JournalEntryCard[] = []
+        map.set(dateKey, arr)
+        groups.push({ dateKey, entries: arr })
+      }
+      map.get(dateKey)!.push(entry)
+    }
+
+    return groups
+  }, [journal_entries])
+
+  function journalDateHeader(dateKey: string, entries: JournalEntryCard[], index: number): string {
+    const hasMultiple = entries.length > 1
+    if (!hasMultiple) return dateKey
+    const entry = entries[index]
+    const d = new Date(entry.created_at_iso)
+    const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    return `${dateKey} ${time}`
   }
 
-  function revokeInvite(inviteId: number) {
-    if (confirm('Revoke this invite?')) {
-      router.delete(`/projects/${project.id}/collaboration_invites/${inviteId}`)
-    }
-  }
+  const ribbonTabs: { label: string; tab: 'timeline' | 'journal' }[] = [
+    { label: 'Timeline', tab: 'timeline' },
+    { label: 'Journal', tab: 'journal' },
+  ]
 
   const content = (
-    <div className="w-full mx-auto p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-bold text-4xl">{project.name}</h1>
-        <div className="flex gap-2">
-          {can.create_journal_entry && (
-            <Link
-              href={`/projects/${project.id}/journal_entries/new`}
-              className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase hover:opacity-80"
-            >
-              New Journal Entry
-            </Link>
-          )}
-          {can.update && (
-            <Link href={`/projects/${project.id}/edit`} className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300">
-              Edit
-            </Link>
-          )}
-          {can.destroy && (
-            <button onClick={deleteProject} className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
-              Delete
-            </button>
-          )}
-        </div>
-      </div>
-
-      {project.is_unlisted && (
-        <span className="inline-block bg-yellow-100 text-yellow-800 text-sm px-2 py-1 rounded mb-4">Unlisted</span>
-      )}
-
-      {project.description && <p className="text-gray-700 mb-4">{project.description}</p>}
-
-      {project.tags.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {project.tags.map((tag) => (
-            <span key={tag} className="bg-gray-100 text-gray-700 text-sm px-2 py-1 rounded">
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="flex gap-4 text-sm text-gray-500 mb-6">
-        {isSafeUrl(project.demo_link) && (
-          <a href={project.demo_link!} target="_blank" rel="noopener" className="text-blue-600 hover:underline">
-            Demo
-          </a>
-        )}
-        {isSafeUrl(project.repo_link) && (
-          <a href={project.repo_link!} target="_blank" rel="noopener" className="text-blue-600 hover:underline">
-            Repository
-          </a>
-        )}
-      </div>
-
-      <p className="text-sm text-gray-500">
-        Created by {project.user_display_name} on {project.created_at}
-      </p>
-
-      {/* Collaborators section */}
-      {(collaborators.length > 0 || can.manage_collaborators) && (
-        <div className="mt-6 border-t pt-4">
-          <h2 className="font-bold text-lg mb-3">Collaborators</h2>
-
-          {collaborators.length > 0 && (
-            <div className="flex flex-wrap gap-3 mb-4">
-              {collaborators.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 bg-brown rounded-full px-3 py-1">
-                  <img src={c.avatar} alt="" className="w-6 h-6 rounded-full" />
-                  <span className="text-sm text-light-brown">{c.display_name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {collaborators.length === 0 && <p className="text-sm text-dark-brown mb-4">No collaborators yet.</p>}
-
-          {can.manage_collaborators && (
-            <>
-              <form onSubmit={sendInvite} className="flex gap-2 items-start">
-                <div className="flex-1">
-                  <Input
-                    type="email"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    placeholder="Invite by email..."
-                    disabled={inviting}
-                  />
-                  {errors?.email && <p className="text-red-500 text-xs mt-1">{errors.email[0]}</p>}
-                </div>
-                <Button type="submit" disabled={inviting || !inviteEmail.trim()} className="text-sm">
-                  {inviting ? 'Sending...' : 'Invite'}
-                </Button>
-              </form>
-
-              {pending_invites.length > 0 && (
-                <div className="mt-3">
-                  <p className="text-sm font-bold text-dark-brown mb-2">Pending invites</p>
-                  <div className="space-y-2">
-                    {pending_invites.map((inv) => (
-                      <div key={inv.id} className="flex items-center justify-between bg-light-brown rounded px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <img src={inv.invitee_avatar} alt="" className="w-6 h-6 rounded-full" />
-                          <span className="text-sm">{inv.invitee_display_name}</span>
-                          <span className="text-xs text-dark-brown">{inv.created_at}</span>
-                        </div>
-                        <button
-                          onClick={() => revokeInvite(inv.id)}
-                          className="text-xs text-dark-brown font-bold hover:underline cursor-pointer"
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {journal_entries.length > 0 && (
-        <div className="mt-8">
-          <h2 className="font-bold text-2xl mb-4">Journal Entries</h2>
-          <div className="space-y-6">
-            {journal_entries.map((entry) => (
-              <div key={entry.id} className="border rounded-lg p-5">
-                <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: entry.content_html }} />
-
-                {entry.images.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {entry.images.map((src, i) => (
-                      <img key={i} src={src} alt="" className="rounded h-32 object-cover" />
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex items-center gap-3 mt-4 text-sm text-gray-500">
-                  <span className="font-medium text-gray-700">{entry.author_display_name}</span>
-                  {entry.collaborators.length > 0 && (
-                    <span>with {entry.collaborators.map((c) => c.display_name).join(', ')}</span>
-                  )}
-                  <span>{entry.created_at}</span>
-                  {entry.recordings_count > 0 && (
-                    <span>
-                      {entry.recordings_count} recording{entry.recordings_count !== 1 && 's'}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+    <div className="relative flex h-full">
+      {ribbonTabs.map(({ label, tab }, i) => (
+        <div
+          key={tab}
+          className={`absolute right-0 translate-x-full z-10 origin-left cursor-pointer motion-safe:hover:scale-105 motion-safe:transition-transform ${rightTab === tab ? 'scale-105' : ''}`}
+          style={{ top: `${3 + i * 5}rem` }}
+          onClick={() => setRightTab(tab)}
+        >
+          <div
+            className={`w-42 h-16 flex ${rightTab === tab ? 'bg-brown' : 'bg-dark-brown'}`}
+            style={{
+              clipPath: 'polygon(0 0, 100% 0, calc(100% - 1rem) 50%, 100% 100%, 0 100%)',
+            }}
+          >
+            <p className="uppercase text-light-brown text-2xl font-medium border-y-2 my-auto border-light-brown text-center w-full pr-3 py-1">
+              {label}
+            </p>
           </div>
         </div>
-      )}
+      ))}
+
+      {/* Left page */}
+      <div className="flex-1 min-w-0 flex flex-col p-6 overflow-y-auto">
+        <h1 className="font-bold text-4xl text-dark-brown mb-2">{project.name}</h1>
+
+        {project.description && <p className="text-dark-brown mb-4">{project.description}</p>}
+
+        {formatByLine(project, collaborators)}
+
+        <div className="flex items-center gap-4 text-sm text-dark-brown mt-2">
+          <span className="flex items-center gap-1">
+            <BookOpenIcon className="w-4 h-4" />
+            {project.journal_entries_count} {project.journal_entries_count === 1 ? 'entry' : 'entries'}
+          </span>
+          <span className="flex items-center gap-1">
+            <ClockIcon className="w-4 h-4" />
+            {formatTime(project.time_logged)}
+          </span>
+        </div>
+
+        <div className="flex gap-4 mt-auto pt-6">
+          {can.update && (
+            <ModalLink
+              href={`/projects/${project.id}/edit`}
+              replace
+              className="bg-brown text-light-brown border-2 border-dark-brown px-6 py-2 font-bold uppercase hover:opacity-80"
+            >
+              Edit
+            </ModalLink>
+          )}
+          <Button disabled className="px-6 py-2">
+            Submit
+          </Button>
+        </div>
+      </div>
+
+      <div className="w-px bg-dark-brown" />
+
+      {/* Right page */}
+      <div className="flex-1 min-w-0 flex flex-col p-6 overflow-hidden">
+        <div className={rightTab === 'timeline' ? 'flex flex-col min-h-0 flex-1' : 'hidden'}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-2xl text-dark-brown">Timeline</h2>
+            {can.create_journal_entry && (
+              <ModalLink
+                href={`/projects/${project.id}/journal_entries/new`}
+                replace
+                className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase text-sm hover:opacity-80"
+              >
+                New Journal Entry
+              </ModalLink>
+            )}
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {timelineEvents.length > 0 ? (
+              <Timeline>
+                {timelineEvents.map((event, i) => {
+                  const isLast = i === timelineEvents.length - 1
+                  if (event.type === 'journal') {
+                    const entry = event.entry
+                    return (
+                      <Timeline.DetailItem
+                        key={`journal-${entry.id}`}
+                        isLast={isLast}
+                        header={
+                          <>
+                            <InlineUser avatar={entry.author_avatar} display_name={entry.author_display_name} />{' '}
+                            journaled <TimeAgo datetime={event.iso} />.
+                          </>
+                        }
+                      >
+                        <div
+                          className="prose prose-sm max-w-none text-dark-brown"
+                          dangerouslySetInnerHTML={{ __html: entry.content_html }}
+                        />
+                      </Timeline.DetailItem>
+                    )
+                  }
+                  if (event.type === 'ship') {
+                    const ship = event.ship
+                    return (
+                      <Timeline.SimpleItem
+                        key={`ship-${ship.id}`}
+                        isLast={isLast}
+                        header={
+                          <>
+                            <InlineUser avatar={project.user_avatar} display_name={project.user_display_name} />{' '}
+                            {shipStatusLabel(ship.status)} <TimeAgo datetime={event.iso} />.
+                          </>
+                        }
+                      />
+                    )
+                  }
+                  return (
+                    <Timeline.SimpleItem
+                      key="created"
+                      isLast={isLast}
+                      header={
+                        <>
+                          <InlineUser avatar={project.user_avatar} display_name={project.user_display_name} /> created{' '}
+                          {project.name} <TimeAgo datetime={event.iso} />.
+                        </>
+                      }
+                    />
+                  )
+                })}
+              </Timeline>
+            ) : (
+              <p className="text-dark-brown text-sm">No activity yet.</p>
+            )}
+          </div>
+        </div>
+
+        <div className={rightTab === 'journal' ? 'flex flex-col min-h-0 flex-1' : 'hidden'}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-2xl text-dark-brown">Journal</h2>
+            {can.create_journal_entry && (
+              <ModalLink
+                href={`/projects/${project.id}/journal_entries/new`}
+                replace
+                className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase text-sm hover:opacity-80"
+              >
+                New Journal Entry
+              </ModalLink>
+            )}
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {journalByDate.length > 0 ? (
+              <div className="space-y-6">
+                {journalByDate.map(({ dateKey, entries }) =>
+                  entries.map((entry, entryIdx) => (
+                    <div key={entry.id}>
+                      <h3 className="font-bold text-lg text-dark-brown">
+                        {journalDateHeader(dateKey, entries, entryIdx)}
+                      </h3>
+                      <p className="text-sm text-dark-brown mb-2">{formatTime(entry.time_logged)} tracked</p>
+                      <div
+                        className="prose prose-sm max-w-none text-dark-brown"
+                        dangerouslySetInnerHTML={{ __html: entry.content_html }}
+                      />
+                    </div>
+                  )),
+                )}
+              </div>
+            ) : (
+              <p className="text-dark-brown text-sm">No journal entries yet.</p>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 
   if (is_modal) {
     return (
       <Modal panelClasses="h-full" paddingClasses="max-w-5xl mx-auto" closeButton={false} maxWidth="7xl">
-        <Frame className="h-full">{content}</Frame>
+        <BookLayout className="max-h-[40em]" showJoint={false}>
+          {content}
+        </BookLayout>
       </Modal>
     )
   }

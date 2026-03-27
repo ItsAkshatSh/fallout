@@ -106,7 +106,11 @@ export interface ProjectDetail {
   is_unlisted: boolean
   tags: string[]
   user_display_name: string
+  user_avatar: string
   created_at: string
+  created_at_iso: string
+  time_logged: number
+  journal_entries_count: number
 }
 
 export interface JournalEntryCard {
@@ -115,18 +119,24 @@ export interface JournalEntryCard {
   images: string[]
   recordings_count: number
   created_at: string
+  created_at_iso: string
   author_display_name: string
+  author_avatar: string
+  time_logged: number
   collaborators: { display_name: string; avatar: string }[]
+}
+
+export interface ShipEvent {
+  id: number
+  status: string
+  created_at_iso: string
 }
 
 export interface ProjectForm {
   id?: number
   name: string
   description: string
-  demo_link: string
   repo_link: string
-  is_unlisted: boolean
-  tags: string[]
 }
 
 export interface AdminUserRow {

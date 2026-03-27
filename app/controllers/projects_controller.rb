@@ -47,6 +47,9 @@ class ProjectsController < ApplicationController
         @project.collaboration_invites.pending.includes(:invitee).map { |i|
           { id: i.id, invitee_display_name: i.invitee.display_name, invitee_avatar: i.invitee.avatar, created_at: i.created_at.strftime("%B %d, %Y") }
         } : [],
+      ships: @project.ships.order(created_at: :desc).map { |s|
+        { id: s.id, status: s.status, created_at_iso: s.created_at.iso8601 }
+      },
       can: {
         update: policy(@project).update?,
         destroy: policy(@project).destroy?,
@@ -62,7 +65,7 @@ class ProjectsController < ApplicationController
     authorize @project
 
     render inertia: "projects/form", props: {
-      project: { name: "", description: "", demo_link: "", repo_link: "", is_unlisted: false, tags: [] },
+      project: { name: "", description: "", repo_link: "" },
       title: "New Project",
       submit_url: projects_path,
       method: "post",
@@ -91,14 +94,12 @@ class ProjectsController < ApplicationController
         id: @project.id,
         name: @project.name,
         description: @project.description.to_s,
-        demo_link: @project.demo_link.to_s,
-        repo_link: @project.repo_link.to_s,
-        is_unlisted: @project.is_unlisted,
-        tags: @project.tags
+        repo_link: @project.repo_link.to_s
       },
       title: "Edit Project",
       submit_url: project_path(@project),
-      method: "patch"
+      method: "patch",
+      is_modal: request.headers["X-InertiaUI-Modal"].present?
     }
   end
 
@@ -125,7 +126,7 @@ class ProjectsController < ApplicationController
   end
 
   def project_params
-    params.expect(project: [ :name, :description, :demo_link, :repo_link, :is_unlisted, tags: [] ])
+    params.expect(project: [ :name, :description, :repo_link ])
   end
 
   def serialize_project_card(project)
@@ -155,7 +156,11 @@ class ProjectsController < ApplicationController
       is_unlisted: project.is_unlisted,
       tags: project.tags,
       user_display_name: project.user.display_name,
-      created_at: project.created_at.strftime("%B %d, %Y")
+      user_avatar: project.user.avatar,
+      created_at: project.created_at.strftime("%B %d, %Y"),
+      created_at_iso: project.created_at.iso8601,
+      time_logged: project.time_logged,
+      journal_entries_count: project.kept_journal_entries.size
     }
   end
 
@@ -166,7 +171,10 @@ class ProjectsController < ApplicationController
       images: journal_entry.images.map { |img| url_for(img) },
       recordings_count: journal_entry.recordings.size,
       created_at: journal_entry.created_at.strftime("%B %d, %Y"),
+      created_at_iso: journal_entry.created_at.iso8601,
       author_display_name: journal_entry.user.display_name,
+      author_avatar: journal_entry.user.avatar,
+      time_logged: journal_entry.recordings.sum { |r| r.recordable.respond_to?(:duration_seconds) ? r.recordable.duration_seconds.to_i : r.recordable.duration.to_i },
       collaborators: journal_entry.collaborator_users.map { |u| { display_name: u.display_name, avatar: u.avatar } }
     }
   end

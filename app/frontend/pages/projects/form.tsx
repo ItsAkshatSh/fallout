@@ -1,6 +1,9 @@
 import { useForm, usePage } from '@inertiajs/react'
-import { Modal } from '@inertiaui/modal-react'
+import { Modal, ModalLink } from '@inertiaui/modal-react'
 import Frame from '@/components/shared/Frame'
+import Button from '@/components/shared/Button'
+import Input from '@/components/shared/Input'
+import TextArea from '@/components/shared/TextArea'
 import type { ProjectForm, SharedProps } from '@/types'
 
 export default function ProjectsForm({
@@ -21,10 +24,7 @@ export default function ProjectsForm({
   const form = useForm({
     name: project.name,
     description: project.description,
-    demo_link: project.demo_link,
     repo_link: project.repo_link,
-    is_unlisted: project.is_unlisted,
-    tags: project.tags,
   })
 
   function submit(e: React.FormEvent) {
@@ -37,12 +37,12 @@ export default function ProjectsForm({
   }
 
   const content = (
-    <div className="max-w-2xl mx-auto py-8">
-      <h1 className="font-bold text-4xl mb-6">{title}</h1>
+    <div className="max-w-2xl mx-auto p-8">
+      <h1 className="font-bold text-4xl text-dark-brown mb-6">{title}</h1>
 
       <form onSubmit={submit} className="space-y-4">
         {Object.keys(errors).length > 0 && (
-          <div className="bg-coral/30 border-2 border-dark-brown text-dark-brown p-4 mb-4">
+          <div className="bg-coral/30 border-2 border-dark-brown text-dark-brown p-4 mb-4 rounded">
             <ul>
               {Object.entries(errors).map(([field, messages]) =>
                 messages.map((msg) => (
@@ -56,80 +56,60 @@ export default function ProjectsForm({
         )}
 
         <div>
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-            Name
+          <label htmlFor="name" className="block text-sm font-bold text-dark-brown mb-1">
+            Project name
           </label>
-          <input
+          <Input
             type="text"
             id="name"
             value={form.data.name}
             onChange={(e) => form.setData('name', e.target.value)}
-            className="mt-1 block w-full border border-gray-300 rounded px-3 py-2"
             required
           />
         </div>
 
         <div>
-          <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+          <label htmlFor="description" className="block text-sm font-bold text-dark-brown mb-1">
             Description
           </label>
-          <textarea
+          <TextArea
             id="description"
             value={form.data.description}
             onChange={(e) => form.setData('description', e.target.value)}
             rows={4}
-            className="mt-1 block w-full border border-gray-300 rounded px-3 py-2"
           />
         </div>
 
         <div>
-          <label htmlFor="demo_link" className="block text-sm font-medium text-gray-700">
-            Demo link
+          <label htmlFor="repo_link" className="block text-sm font-bold text-dark-brown mb-1">
+            GitHub repo link
           </label>
-          <input
-            type="url"
-            id="demo_link"
-            value={form.data.demo_link}
-            onChange={(e) => form.setData('demo_link', e.target.value)}
-            className="mt-1 block w-full border border-gray-300 rounded px-3 py-2"
-            placeholder="https://"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="repo_link" className="block text-sm font-medium text-gray-700">
-            Repo link
-          </label>
-          <input
+          <Input
             type="url"
             id="repo_link"
             value={form.data.repo_link}
             onChange={(e) => form.setData('repo_link', e.target.value)}
-            className="mt-1 block w-full border border-gray-300 rounded px-3 py-2"
-            placeholder="https://"
+            placeholder="https://github.com/..."
           />
         </div>
 
-        <div>
-          <label className="inline-flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.data.is_unlisted}
-              onChange={(e) => form.setData('is_unlisted', e.target.checked)}
-              className="rounded border-gray-300"
-            />
-            <span className="text-sm text-gray-700">Unlisted</span>
-          </label>
-        </div>
-
-        <div>
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 cursor-pointer"
-            disabled={form.processing}
-          >
+        <div className="flex gap-4 pt-2">
+          <Button type="submit" disabled={form.processing}>
             {form.processing ? 'Saving...' : 'Save'}
-          </button>
+          </Button>
+          {project.id && is_modal ? (
+            <ModalLink
+              href={`/projects/${project.id}`}
+              replace
+              className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase hover:opacity-80"
+            >
+              Cancel
+            </ModalLink>
+          ) : (
+            <Button variant="link" onClick={() => window.history.back()}>
+              Cancel
+            </Button>
+          )}
         </div>
       </form>
     </div>
