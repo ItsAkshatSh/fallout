@@ -581,7 +581,7 @@ export default function LandingIndex() {
                       <li>Design your project</li>
                       <li>Track all of your time by journaling & timelapsing on our platform</li>
                       <li>Submit for feedback!</li>
-                      <li>We give you up to $350 USD to buy parts, and build your projects!</li>
+                      <li>We give you funding to buy parts, and build your projects!</li>
                       <li>Publish + Share online</li>
                       <li>Repeat until you've spent 60 hours</li>
                     </ol>
@@ -675,10 +675,10 @@ export default function LandingIndex() {
                   q: 'Is this free?',
                   a: (
                     <>
-                      Yes! Each of your projects will be funded up to <strong>$350 (USD)</strong>, and the event itself
-                      is <strong>100% free</strong>. As for travel, each hour you work beyond the{' '}
-                      <strong>60 hour minimum</strong> will earn you <strong>$8 (USD)</strong> and we will have
-                      need-based flight stipends available.
+                      Yes! Each of your projects will be funded up to <strong>$5 (USD) per hour you spend</strong>, and
+                      the event itself is <strong>100% free</strong>. As for travel, each hour you work beyond the{' '}
+                      <strong>60 hour minimum</strong> will earn you <strong>$8 (USD)</strong> and we have need-based
+                      flight stipends available.
                     </>
                   ),
                 },
