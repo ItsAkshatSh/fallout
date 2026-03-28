@@ -43,8 +43,6 @@ export default function PathIndex() {
 
   const { visitModal, stack } = useModalStack()
 
-  const [showBanner, setShowBanner] = useState(() => localStorage.getItem('kickoff_banner_dismissed') !== 'true')
-
   const modalOpen = stack.length > 0
 
   const [readDocsNudge, setReadDocsNudge] = useState(false)
@@ -118,13 +116,6 @@ export default function PathIndex() {
       <FlashMessages />
       <div className="fixed z-20 top-2 left-2 right-2 xs:p-6 flex flex-col gap-2">
         <Header koiBalance={user.koi} avatar={user.avatar} displayName={user.display_name} />
-        {showBanner && (
-          <div className="bg-brown text-beige  py-2 px-3 lg:px-6  text-sm sm:text-lg w-full xs:w-fit flex gap-x-6 mx-auto hover:bg-light-brown border border-0 border-dark-brown hover:border-2 rounded-xs hover:text-dark-brown transition-all ">
-            <a href="https://luma.com/fallout" target="_self" className="text-center font-medium rounded-xs underline">RSVP for our kickoff call - this Friday at 9PM EDT!</a>
-            <span className="cursor-pointer" onClick={() => { localStorage.setItem('kickoff_banner_dismissed', 'true'); setShowBanner(false) }}>-</span>
-          </div>
-        )}
-        
       </div>
       
 
