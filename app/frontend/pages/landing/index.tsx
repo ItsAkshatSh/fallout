@@ -642,11 +642,11 @@ export default function LandingIndex() {
               </p>
 
               <div className="flex flex-col items-center gap-6 md:gap-8 w-full max-w-4xl">
-                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-                  <div className="relative inline-block flex-shrink-0">
+                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 w-full">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
                     <img
                       src="/landing/logos/mit.webp"
-                      className="h-16 md:h-24 object-contain opacity-0"
+                      className="w-full h-auto md:h-24 md:w-auto object-contain opacity-0"
                       alt="MIT School of Engineering"
                     />
                     <div
@@ -663,10 +663,10 @@ export default function LandingIndex() {
                       }}
                     ></div>
                   </div>
-                  <div className="relative inline-block flex-shrink-0">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
                     <img
                       src="/landing/logos/github.webp"
-                      className="h-14 md:h-20 object-contain opacity-0"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
                       alt="GitHub"
                     />
                     <div
@@ -684,9 +684,13 @@ export default function LandingIndex() {
                     ></div>
                   </div>
                 </div>
-                <div className="flex flex-wrap justify-center items-center gap-6 md:gap-12">
-                  <div className="relative inline-block flex-shrink-0">
-                    <img src="/landing/logos/amd.webp" className="h-12 md:h-16 object-contain opacity-0" alt="AMD" />
+                <div className="flex flex-wrap justify-center items-center gap-6 md:gap-12 w-full">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/amd.webp"
+                      className="w-full h-auto md:h-16 md:w-auto object-contain opacity-0"
+                      alt="AMD"
+                    />
                     <div
                       className="absolute inset-0 bg-brown"
                       style={{
@@ -701,10 +705,10 @@ export default function LandingIndex() {
                       }}
                     ></div>
                   </div>
-                  <div className="relative inline-block flex-shrink-0">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
                     <img
                       src="/landing/logos/cac.webp"
-                      className="h-12 md:h-20 object-contain opacity-0"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
                       alt="Congressional App Challenge"
                     />
                     <div
@@ -721,10 +725,10 @@ export default function LandingIndex() {
                       }}
                     ></div>
                   </div>
-                  <div className="relative inline-block flex-shrink-0">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
                     <img
                       src="/landing/logos/gwc.webp"
-                      className="h-12 md:h-20 object-contain opacity-0"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
                       alt="Girls Who Code"
                     />
                     <div
