@@ -597,36 +597,157 @@ export default function LandingIndex() {
               {/* <h4>China</h4> */}
             </div>
           </section>
-          <section className="px-6 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-20 bg-beige text-dark-brown text-2xl">
-            <div className="w-full bg-white border-2 border-black p-6 my-2 rounded-sm">
-              <span className="font-semibold text-2xl">Hack Club is recognized by:</span>
-              <ul className="flex gap-2 md:gap-4 w-full items-center justify-center py-6 px-4 flex-wrap lg:flex-nowrap">
-                <li>
-                  <img src="/landing/logos/gwc.webp" className="h-10 md:h-18 object-contain" alt="Girls Who Code" />
-                </li>
-                <li>
-                  <img src="/landing/logos/github.webp" className="h-12 md:h-22 object-contain" alt="GitHub" />
-                </li>
-                <li>
-                  <img
-                    src="/landing/logos/mit.webp"
-                    className="h-14 md:h-24 object-contain"
-                    alt="MIT School of Engineering"
-                  />
-                </li>
-                <li>
-                  <img
-                    src="/landing/logos/cac.webp"
-                    className="h-10 md:h-16 object-contain"
-                    alt="Congressional App Challenge"
-                  />
-                </li>
-                <li>
-                  <img src="/landing/logos/amd.webp" className="h-10 md:h-16 object-contain" alt="AMD" />
-                </li>
-              </ul>
+          <section className="px-6 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-20 bg-beige text-dark-brown">
+            <div className="w-full border-[1.5px] border-dark-brown relative px-6 py-16 flex flex-col items-center">
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-beige px-4">
+                <img src="/landing/flag.svg" alt="Hack Club" className="h-12 object-contain" />
+              </div>
+              <h3 className="w-full font-bold text-brown mb-4 uppercase mt-2">
+                {/* Mobile version (two lines, equal width) */}
+                <div className="md:hidden w-[85%] mx-auto flex flex-col items-center">
+                  <svg viewBox="0 0 100 24" className="w-full h-auto overflow-visible fill-current">
+                    <text
+                      x="50%"
+                      y="22"
+                      textAnchor="middle"
+                      fontSize="26"
+                      fontWeight="bold"
+                      textLength="100"
+                      lengthAdjust="spacing"
+                    >
+                      EARN A
+                    </text>
+                  </svg>
+                  <svg viewBox="0 0 100 14" className="w-full h-auto overflow-visible fill-current mt-1">
+                    <text
+                      x="50%"
+                      y="12"
+                      textAnchor="middle"
+                      fontSize="15"
+                      fontWeight="bold"
+                      textLength="100"
+                      lengthAdjust="spacing"
+                    >
+                      CERTIFICATE
+                    </text>
+                  </svg>
+                </div>
+                {/* Desktop version (single line) */}
+                <div className="hidden md:block text-center text-3xl md:text-5xl tracking-wide">EARN A CERTIFICATE</div>
+              </h3>
+              <p className="text-xl md:text-2xl text-center text-brown mb-8 max-w-2xl mt-4 md:mt-0">
+                Upon the completion of 60 hours for Fallout,
+                <br />
+                get a certificate recognized by
+              </p>
+
+              <div className="flex flex-col items-center gap-6 md:gap-8 w-full max-w-4xl">
+                <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16 w-full">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/mit.webp"
+                      className="w-full h-auto md:h-24 md:w-auto object-contain opacity-0"
+                      alt="MIT School of Engineering"
+                    />
+                    <div
+                      className="absolute inset-0 bg-brown"
+                      style={{
+                        WebkitMaskImage: 'url(/landing/logos/mit.webp)',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskImage: 'url(/landing/logos/mit.webp)',
+                        maskSize: 'contain',
+                        maskPosition: 'center',
+                        maskRepeat: 'no-repeat',
+                      }}
+                    ></div>
+                  </div>
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/github.webp"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
+                      alt="GitHub"
+                    />
+                    <div
+                      className="absolute inset-0 bg-brown"
+                      style={{
+                        WebkitMaskImage: 'url(/landing/logos/github.webp)',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskImage: 'url(/landing/logos/github.webp)',
+                        maskSize: 'contain',
+                        maskPosition: 'center',
+                        maskRepeat: 'no-repeat',
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-center items-center gap-6 md:gap-12 w-full">
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/amd.webp"
+                      className="w-full h-auto md:h-16 md:w-auto object-contain opacity-0"
+                      alt="AMD"
+                    />
+                    <div
+                      className="absolute inset-0 bg-brown"
+                      style={{
+                        WebkitMaskImage: 'url(/landing/logos/amd.webp)',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskImage: 'url(/landing/logos/amd.webp)',
+                        maskSize: 'contain',
+                        maskPosition: 'center',
+                        maskRepeat: 'no-repeat',
+                      }}
+                    ></div>
+                  </div>
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/cac.webp"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
+                      alt="Congressional App Challenge"
+                    />
+                    <div
+                      className="absolute inset-0 bg-brown"
+                      style={{
+                        WebkitMaskImage: 'url(/landing/logos/cac.webp)',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskImage: 'url(/landing/logos/cac.webp)',
+                        maskSize: 'contain',
+                        maskPosition: 'center',
+                        maskRepeat: 'no-repeat',
+                      }}
+                    ></div>
+                  </div>
+                  <div className="relative flex-shrink-0 w-[67%] md:w-auto flex justify-center">
+                    <img
+                      src="/landing/logos/gwc.webp"
+                      className="w-full h-auto md:h-20 md:w-auto object-contain opacity-0"
+                      alt="Girls Who Code"
+                    />
+                    <div
+                      className="absolute inset-0 bg-brown"
+                      style={{
+                        WebkitMaskImage: 'url(/landing/logos/gwc.webp)',
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskImage: 'url(/landing/logos/gwc.webp)',
+                        maskSize: 'contain',
+                        maskPosition: 'center',
+                        maskRepeat: 'no-repeat',
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <span className="text-2xl">Upon the completion of 60h, we will issue you a certificate.</span>
           </section>
           <section className="px-6 md:px-8 lg:px-18 xl:px-36 2xl:px-54 py-20 bg-beige text-dark-brown">
             <h2 className="text-6xl font-semibold mb-10 font-outfit">FAQ</h2>
