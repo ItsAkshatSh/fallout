@@ -212,6 +212,18 @@ export interface AdminShipDetail {
   created_at: string
 }
 
+export interface PreflightCheck {
+  key: string
+  label: string
+  status: 'running' | 'passed' | 'failed' | 'warn' | 'skipped'
+  message: string | null
+}
+
+export interface PreflightResult {
+  status: 'running' | 'passed' | 'failed'
+  checks: PreflightCheck[]
+}
+
 export interface ShipForm {
   id: number
   status: string

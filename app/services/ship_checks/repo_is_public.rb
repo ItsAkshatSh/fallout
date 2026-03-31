@@ -1,0 +1,25 @@
+# frozen_string_literal: true
+
+module ShipChecks
+  module RepoIsPublic
+    DEFINITION = { key: :repo_is_public, label: "Repository is public", deps: [ :repo_meta ], visibility: :user }.freeze
+
+    def self.call(ctx)
+      if ctx.project.repo_link.blank?
+        return ShipCheckService::CheckResult.new(
+          key: "repo_is_public", label: DEFINITION[:label],
+          status: :skipped, message: "No repository link provided", visibility: :user
+        )
+      end
+
+      passed = ctx.repo_meta.present?
+      ShipCheckService::CheckResult.new(
+        key: "repo_is_public",
+        label: DEFINITION[:label],
+        status: passed ? :passed : :failed,
+        message: passed ? nil : "Repository is not accessible — make sure it exists and is public",
+        visibility: :user
+      )
+    end
+  end
+end

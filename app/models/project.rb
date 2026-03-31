@@ -35,6 +35,7 @@ class Project < ApplicationRecord
 
   belongs_to :user
   has_many :ships, dependent: :destroy
+  has_many :preflight_runs, dependent: :destroy
   has_many :journal_entries, dependent: :destroy
   has_many :kept_journal_entries, -> { kept }, class_name: "JournalEntry"
   has_many :collaborators, -> { kept }, as: :collaboratable, dependent: :destroy

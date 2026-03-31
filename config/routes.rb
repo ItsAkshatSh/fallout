@@ -162,6 +162,14 @@ Rails.application.routes.draw do
     get "onboarding", on: :collection # Project onboarding modal accessed from path page
     resources :journal_entries, only: [ :new, :create ]
     resources :collaboration_invites, only: [ :create, :destroy ], module: :projects # Send and revoke project collaboration invites
+    get :ship, controller: "projects/ships", action: :preflight # /projects/:id/ship — multi-step submission page
+    resources :ships, only: [ :create ], module: :projects do
+      collection do
+        get :preflight # Legacy route — redirects to /projects/:id/ship
+        post "preflight/run", action: :run # Frontend kicks off preflight scan
+        get "preflight/status", action: :status # Polled by frontend for real-time check updates
+      end
+    end
   end
 
   resources :collaboration_invites, only: [ :show ] do

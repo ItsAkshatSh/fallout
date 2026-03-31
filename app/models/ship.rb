@@ -10,20 +10,24 @@
 #  frozen_repo_link  :string
 #  frozen_screenshot :string
 #  justification     :string
+#  preflight_results :jsonb
 #  status            :integer          default("pending"), not null
 #  created_at        :datetime         not null
 #  updated_at        :datetime         not null
+#  preflight_run_id  :bigint
 #  project_id        :bigint           not null
 #  reviewer_id       :bigint
 #
 # Indexes
 #
-#  index_ships_on_project_id   (project_id)
-#  index_ships_on_reviewer_id  (reviewer_id)
-#  index_ships_on_status       (status)
+#  index_ships_on_preflight_run_id  (preflight_run_id)
+#  index_ships_on_project_id        (project_id)
+#  index_ships_on_reviewer_id       (reviewer_id)
+#  index_ships_on_status            (status)
 #
 # Foreign Keys
 #
+#  fk_rails_...  (preflight_run_id => preflight_runs.id)
 #  fk_rails_...  (project_id => projects.id)
 #  fk_rails_...  (reviewer_id => users.id)
 #
@@ -32,6 +36,7 @@ class Ship < ApplicationRecord
 
   belongs_to :project
   belongs_to :reviewer, class_name: "User", optional: true
+  belongs_to :preflight_run, optional: true # Older ships predate PreflightRun tracking
 
   enum :status, { pending: 0, approved: 1, returned: 2, rejected: 3 }
 

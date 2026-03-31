@@ -31,6 +31,12 @@ class ProjectPolicy < ApplicationPolicy
     admin? || owner?
   end
 
+  def ship?
+    return false if record.discarded?
+    return false if record.ships.pending.exists? # Block while a submission is already pending review
+    !user.trial? && owner? # Only verified project owners can submit for review
+  end
+
   def manage_collaborators?
     return false unless user.present? && !user.trial? && collaborators_enabled?
     admin? || owner? # Only verified project owners can send/revoke invites (flag-gated)

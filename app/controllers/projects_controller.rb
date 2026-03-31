@@ -49,6 +49,7 @@ class ProjectsController < ApplicationController
       can: {
         update: policy(@project).update?,
         destroy: policy(@project).destroy?,
+        ship: policy(@project).ship?,
         manage_collaborators: collab_enabled && policy(@project).manage_collaborators?,
         create_journal_entry: JournalEntryPolicy.new(current_user, @project.journal_entries.build(user: current_user)).create?
       },

@@ -71,7 +71,13 @@ export default function ProjectsShow({
   journal_entries: JournalEntryCard[]
   collaborators: CollaboratorInfo[]
   ships: ShipEvent[]
-  can: { update: boolean; destroy: boolean; manage_collaborators: boolean; create_journal_entry: boolean }
+  can: {
+    update: boolean
+    destroy: boolean
+    ship: boolean
+    manage_collaborators: boolean
+    create_journal_entry: boolean
+  }
   is_modal?: boolean
 }) {
   const [rightTab, setRightTab] = useState<'timeline' | 'journal'>('timeline')
@@ -231,8 +237,8 @@ export default function ProjectsShow({
               Edit
             </ModalLink>
           )}
-          {can.update && (
-            <Button disabled className="px-6 py-2">
+          {can.ship && (
+            <Button onClick={() => router.visit(`/projects/${project.id}/ship`)} className="px-6 py-2">
               Submit
             </Button>
           )}

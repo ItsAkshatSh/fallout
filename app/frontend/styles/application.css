@@ -7,26 +7,29 @@
 /* @plugin '@tailwindcss/forms'; */
 
 @theme {
-  --font-sans: 'Google Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-sans:
+    'Google Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
   --font-google: 'Google Sans', sans-serif;
   --font-outfit: 'Outfit', sans-serif;
   --font-bells: 'Hells Bells', sans-serif;
   --font-comico: 'Comico', sans-serif;
-  --color-dark-blue:#007BDA;
+  --color-dark-blue: #007bda;
 
   --breakpoint-2xs: 320px;
   --breakpoint-xs: 480px;
 
-  --color-blue: #38C9FF;
-  --color-light-blue:#C3EFFF;
+  --color-blue: #38c9ff;
+  --color-light-blue: #c3efff;
+  --color-lighter-blue: #edf7fb;
   --color-dark-brown: #61453a;
   --color-black: #61453a;
   --color-brown: #9f715d;
   --color-light-brown: #edd1b0;
-  --color-beige: #FCF1E5;
+  --color-beige: #fcf1e5;
 
-  --color-light-green: #C8E6D8;
-  --color-green: #37B576;
+  --color-light-green: #c8e6d8;
+  --color-green: #37b576;
   /* --color-light-blue: #c3efff; */
   --color-yellow: #ffebad;
   --color-pink: #fc90d2;

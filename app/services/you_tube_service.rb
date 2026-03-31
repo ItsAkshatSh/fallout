@@ -49,7 +49,7 @@ module YouTubeService
       req.headers["Accept"] = "application/json"
       req.params["part"] = "snippet,contentDetails"
       req.params["id"] = video_id
-      req.params["key"] = ENV.fetch("YOUTUBE_API_KEY", nil)
+      req.params["key"] = ENV.fetch("GOOGLE_CLOUD_API_KEY", nil)
     end
 
     unless response.success?
