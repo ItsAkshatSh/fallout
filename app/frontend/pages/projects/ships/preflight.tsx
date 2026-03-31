@@ -47,6 +47,8 @@ function SubmissionLayout({ title, children }: { title?: string; children: React
 }
 
 function GuidelinesStep({ onContinue }: { onContinue: () => void }) {
+  const [confirmed, setConfirmed] = useState(false)
+
   return (
     <SubmissionLayout title="Read The Guidelines">
       <p className="max-w-98 pb-6 py-4">
@@ -60,10 +62,10 @@ function GuidelinesStep({ onContinue }: { onContinue: () => void }) {
         <img src="/icon/project.webp" className="w-24" alt="Project Icon"></img>
         <p className="text-4xl font-bold max-w-140 py-4">95% of rejections could have taken 5 MIN to fix</p>
         <Button
-          onClick={onContinue}
+          onClick={confirmed ? onContinue : () => setConfirmed(true)}
           className="bg-brown text-light-brown border-2 border-dark-brown font-bold uppercase py-2 px-6 text-2xl"
         >
-          I've read & am ready to submit!
+          {confirmed ? 'Are you sure?' : "I've read & am ready to submit!"}
         </Button>
         <Link href="/path" className="underline">
           Nevermind! Take me back.
