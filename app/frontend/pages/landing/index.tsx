@@ -878,7 +878,7 @@ export default function LandingIndex() {
                   </button>
                   <div
                     className="overflow-hidden transition-all duration-300 ease-in-out"
-                    style={{ maxHeight: openFaq === i ? '300px' : '0px' }}
+                    style={{ maxHeight: openFaq === i ? '600px' : '0px' }}
                   >
                     <div className="pb-5 text-lg md:text-xl text-brown">{a}</div>
                   </div>
