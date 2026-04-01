@@ -7,6 +7,7 @@ require "base64"
 module ShipChecks
   module ImageOriginality
     DEFINITION = { key: :image_originality, label: "Images are original (not found elsewhere online)", deps: [ :readme_content, :image_descriptions ], visibility: :internal }.freeze
+    MAX_IMAGES = 25
 
     ApiError = Class.new(StandardError)
 
@@ -47,7 +48,7 @@ module ShipChecks
     end
 
     def self.raster_urls(ctx)
-      (ctx.readme_image_urls || []).reject { |u| u.match?(/\.svg$/i) }.first(25)
+      (ctx.readme_image_urls || []).reject { |u| u.match?(/\.svg$/i) }.first(MAX_IMAGES)
     end
 
     def self.web_detect(tempfile, api_key, repo_nwo, readme)

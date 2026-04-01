@@ -5,9 +5,9 @@ require "json"
 
 module ShipChecks
   module AiGeneratedImage
-    DEFINITION = { key: :ai_generated_image, label: "Images are original (not AI-generated)", deps: [ :readme_content, :image_descriptions ], visibility: :internal }.freeze
+    DEFINITION = { key: :ai_generated_image, label: "Images are original (not AI-generated)", deps: [ :readme_content ], visibility: :internal }.freeze
     THRESHOLD = 0.80
-    MAX_IMAGES = 2
+    MAX_IMAGES = 10
 
     ApiError = Class.new(StandardError)
 
@@ -45,34 +45,8 @@ module ShipChecks
       tempfiles&.each { |f| f.close! rescue nil } # rubocop:disable Style/RescueModifier
     end
 
-    # Use LLM to pick the main project images from descriptions, then map back to URLs
     def self.pick_main_images(ctx)
-      all_urls = (ctx.readme_image_urls || []).reject { |u| u.match?(/\.svg$/i) }
-      return [] if all_urls.empty?
-
-      descriptions = ctx.image_descriptions
-      return all_urls.first(MAX_IMAGES) if descriptions.nil? || descriptions.size <= MAX_IMAGES
-
-      indices = llm_pick_indices(descriptions)
-      return all_urls.first(MAX_IMAGES) if indices.empty?
-
-      indices.filter_map { |i| all_urls[i] }
-    end
-
-    def self.llm_pick_indices(descriptions)
-      numbered = descriptions.map.with_index(1) { |d, i| "#{i}. #{d}" }.join("\n")
-      chat = RubyLLM.chat
-      response = chat.ask(<<~PROMPT)
-        From these README image descriptions, pick the #{MAX_IMAGES} that are most likely the primary project photos (hero shots of the finished product, assembled device, or main project result). Avoid diagrams, schematics, screenshots, or logos.
-
-        #{numbered}
-
-        Respond with ONLY the image numbers separated by commas (e.g. "1, 3"). Nothing else.
-      PROMPT
-
-      response.content.strip.scan(/\d+/).map { |n| n.to_i - 1 }.select { |i| i >= 0 && i < descriptions.size }.first(MAX_IMAGES)
-    rescue StandardError
-      []
+      (ctx.readme_image_urls || []).reject { |u| u.match?(/\.svg$/i) }.first(MAX_IMAGES)
     end
 
     def self.check_sightengine(tempfile, api_user, api_secret)
