@@ -60,7 +60,7 @@ function ProjectsOnboarding({ is_modal }: { is_modal: boolean }) {
 
         <PaginationPage>
           {({ next, prev }) => (
-            <div className="space-y-5 text-xl flex flex-col h-full">
+            <div className="space-y-5 text-xl flex flex-col h-full overflow-scroll">
               <h2 className="font-outfit text-3xl font-semibold">Start your first project</h2>
               <div className="space-y-4">
                 <p>Build as many hardware projects as you wish, and we'll help you make it real.</p>
@@ -84,14 +84,14 @@ function ProjectsOnboarding({ is_modal }: { is_modal: boolean }) {
                   There's a good chance your first idea isn't great, but just jot something down!
                 </p>
               </div>
-              <div className="grow min-h-0 flex flex-col">
+              <div className="grow flex flex-col">
                 <label className="text-lg mb-2">
                   <span className="font-bold">Describe what you want to build.</span> You'll be able to edit this later.
                 </label>
                 <TextArea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full h-full resize-y px-3 py-2 text-base"
+                  className="w-full min-h-10 h-full resize-y px-3 py-2 text-base"
                 />
               </div>
               <div className="flex justify-between">
