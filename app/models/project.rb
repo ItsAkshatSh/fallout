@@ -33,6 +33,14 @@ class Project < ApplicationRecord
 
   pg_search_scope :search, against: [ :name, :description ], using: { tsearch: { prefix: true } }
 
+  scoped_search on: :id
+  scoped_search on: :name
+  scoped_search on: :description
+  scoped_search on: :repo_link
+  scoped_search on: :is_unlisted, aliases: [ :unlisted ], default_operator: :exact_match
+  scoped_search on: :created_at
+  scoped_search relation: :user, on: :display_name, rename: :owner
+
   belongs_to :user
   has_many :ships, dependent: :destroy
   has_many :preflight_runs, dependent: :destroy

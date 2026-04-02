@@ -145,6 +145,7 @@ export interface AdminUserRow {
   id: number
   display_name: string
   email: string
+  slack_id: string | null
   roles: string[]
   projects_count: number
   is_discarded: boolean
@@ -156,7 +157,9 @@ export interface AdminUserDetail {
   display_name: string
   email: string
   avatar: string
+  slack_id: string | null
   roles: string[]
+  projects_count: number
   timezone: string
   is_banned: boolean
   is_discarded: boolean
@@ -164,12 +167,21 @@ export interface AdminUserDetail {
   created_at: string
 }
 
+export interface AdminProjectData {
+  projects: AdminProjectRow[]
+  pagy: PagyProps
+  total_count: number
+}
+
 export interface AdminProjectRow {
   id: number
   name: string
   user_id: number
   user_display_name: string
-  ships_count: number
+  journal_entries_count: number
+  repo_link: string | null
+  hours_tracked: number
+  last_entry_at: string | null
   is_unlisted: boolean
   is_discarded: boolean
   created_at: string
@@ -187,6 +199,12 @@ export interface AdminProjectDetail {
   discarded_at: string | null
   user_id: number
   user_display_name: string
+  user_avatar: string
+  journal_entries_count: number
+  hours_tracked: number
+  last_entry_at: string | null
+  created_at: string
+  collaborators: { id: number; display_name: string; avatar: string }[]
 }
 
 export interface AdminShipRow {

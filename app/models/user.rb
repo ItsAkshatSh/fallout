@@ -39,6 +39,23 @@ class User < ApplicationRecord
 
   pg_search_scope :search, against: [ :display_name, :email ], using: { tsearch: { prefix: true } }
 
+  scoped_search on: :id
+  scoped_search on: :display_name, aliases: [ :name, :username ]
+  scoped_search on: :email
+  scoped_search on: :slack_id
+  scoped_search on: :created_at, aliases: [ :joined ]
+  scoped_search on: :roles, aliases: [ :role ], ext_method: :search_roles, only_explicit: true, operators: [ :eq, :ne ]
+
+  def self.search_roles(_key, operator, value)
+    sanitized = ActiveRecord::Base.sanitize_sql_like(value)
+    sql = if operator == "="
+      "roles @> ARRAY['#{sanitized}']::varchar[]"
+    else
+      "NOT (roles @> ARRAY['#{sanitized}']::varchar[])"
+    end
+    { conditions: sql }
+  end
+
   has_many :ahoy_visits, class_name: "Ahoy::Visit", dependent: :nullify
   has_many :ahoy_events, class_name: "Ahoy::Event", dependent: :nullify
   has_one :latest_locatable_visit, -> { where.not(country: [ nil, "" ]).order(started_at: :desc) }, class_name: "Ahoy::Visit"

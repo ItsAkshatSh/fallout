@@ -114,7 +114,7 @@ Rails.application.routes.draw do
   end
   constraints Constraints::StaffConstraint.new do
     namespace :admin do
-      get "/" => "static_pages#index", as: :root
+      get "/" => "dashboard#index", as: :root
       resources :ships, only: [ :index, :show, :edit, :update ], path: "reviews"
     end
   end

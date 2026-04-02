@@ -1,5 +1,10 @@
+import type { ReactNode } from 'react'
 import { useForm } from '@inertiajs/react'
 import { FormEvent } from 'react'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Button } from '@/components/admin/ui/button'
+import { Card, CardContent } from '@/components/admin/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/admin/ui/table'
 
 interface Segment {
   start_min: number
@@ -24,32 +29,30 @@ export default function AdminActivityChecksNew({ results }: { results?: Results 
   }
 
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <h1 className="font-bold text-4xl mb-2">Timelapse Activity Check</h1>
-      <p className="text-brown mb-8">
+    <div className="max-w-4xl">
+      <h1 className="text-2xl font-semibold tracking-tight mb-1">Timelapse Activity Check</h1>
+      <p className="text-sm text-muted-foreground mb-6">
         Upload a timelapse video to analyze frame-by-frame activity. Each frame represents 1 minute.
       </p>
 
-      <form onSubmit={handleSubmit} className="mb-8">
-        <div className="flex items-end gap-4">
-          <label className="flex-1">
-            <span className="block text-sm font-medium mb-1">Video file</span>
-            <input
-              type="file"
-              accept="video/*"
-              onChange={(e) => setData('video', e.target.files?.[0] ?? null)}
-              className="block w-full text-sm border border-dark-brown rounded-lg p-2 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-brown file:text-white hover:file:bg-dark-brown"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={!data.video || processing}
-            className="px-6 py-2 bg-brown text-white rounded-lg font-medium disabled:opacity-50 hover:bg-dark-brown"
-          >
-            {processing ? 'Analyzing...' : 'Analyze'}
-          </button>
-        </div>
-      </form>
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <form onSubmit={handleSubmit} className="flex items-end gap-4">
+            <label className="flex-1">
+              <span className="block text-sm font-medium mb-1.5">Video file</span>
+              <input
+                type="file"
+                accept="video/*"
+                onChange={(e) => setData('video', e.target.files?.[0] ?? null)}
+                className="block w-full text-sm border border-input rounded-md p-2 file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-secondary file:text-secondary-foreground hover:file:bg-secondary/80"
+              />
+            </label>
+            <Button type="submit" disabled={!data.video || processing}>
+              {processing ? 'Analyzing...' : 'Analyze'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
 
       {results && <ActivityResults results={results} />}
     </div>
@@ -61,7 +64,7 @@ function ActivityResults({ results }: { results: Results }) {
 
   return (
     <div>
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-3 gap-4 mb-6">
         <StatCard label="Total Frames" value={results.total_frames} subtitle="1 frame = 1 minute" />
         <StatCard
           label="Active"
@@ -76,31 +79,33 @@ function ActivityResults({ results }: { results: Results }) {
         />
       </div>
 
-      <h2 className="font-bold text-xl mb-3">Timeline</h2>
+      <h2 className="text-lg font-semibold mb-3">Timeline</h2>
       <Timeline totalFrames={results.total_frames} segments={results.segments} />
 
       {results.segments.length > 0 && (
-        <>
-          <h2 className="font-bold text-xl mt-8 mb-3">Inactive Segments</h2>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b text-left">
-                <th className="py-2 px-3">Start</th>
-                <th className="py-2 px-3">End</th>
-                <th className="py-2 px-3">Duration</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.segments.map((seg, i) => (
-                <tr key={i} className="border-b">
-                  <td className="py-2 px-3">Minute {seg.start_min}</td>
-                  <td className="py-2 px-3">Minute {seg.end_min}</td>
-                  <td className="py-2 px-3">{seg.duration_min} min</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+        <div className="mt-6">
+          <h2 className="text-lg font-semibold mb-3">Inactive Segments</h2>
+          <div className="rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Start</TableHead>
+                  <TableHead>End</TableHead>
+                  <TableHead>Duration</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {results.segments.map((seg, i) => (
+                  <TableRow key={i}>
+                    <TableCell>Minute {seg.start_min}</TableCell>
+                    <TableCell>Minute {seg.end_min}</TableCell>
+                    <TableCell>{seg.duration_min} min</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -118,11 +123,13 @@ function StatCard({
   warn?: boolean
 }) {
   return (
-    <div className={`border rounded-lg p-4 ${warn ? 'border-red-400 bg-red-50' : 'border-dark-brown'}`}>
-      <div className="text-sm text-brown">{label}</div>
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-xs text-brown mt-1">{subtitle}</div>
-    </div>
+    <Card className={warn ? 'border-destructive' : ''}>
+      <CardContent className="pt-4 pb-4">
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-2xl font-bold mt-0.5">{value}</div>
+        <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -138,23 +145,25 @@ function Timeline({ totalFrames, segments }: { totalFrames: number; segments: Se
 
   return (
     <div>
-      <div className="flex w-full h-8 rounded overflow-hidden border border-dark-brown">
+      <div className="flex w-full h-6 rounded-md overflow-hidden border border-border">
         {Array.from({ length: totalFrames }, (_, i) => {
           const inactive = inactiveSet.has(i)
           return (
             <div
               key={i}
-              className={inactive ? 'bg-red-400' : 'bg-green-500'}
+              className={inactive ? 'bg-destructive/40' : 'bg-green-500'}
               style={{ flex: 1 }}
               title={`Minute ${i}${inactive ? ' (idle)' : ''}`}
             />
           )
         })}
       </div>
-      <div className="flex justify-between text-xs text-brown mt-1">
+      <div className="flex justify-between text-xs text-muted-foreground mt-1">
         <span>0 min</span>
         <span>{totalFrames} min</span>
       </div>
     </div>
   )
 }
+
+AdminActivityChecksNew.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

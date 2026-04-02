@@ -62,6 +62,10 @@ Maintain existing functionality; do not introduce bugs. Before finishing, run `g
 
 Use only the project's existing color palette (Tailwind theme colors like `bg-brown`, `text-light-brown`, `border-dark-brown`, etc.). Do not use hex colors or arbitrary values (e.g. `bg-[#ae9578]`) unless explicitly told to. Do not use opacity/translucency (e.g. `bg-dark-brown/50`, `text-brown/30`) as a way to create color shades — if a shade is needed that doesn't exist in the palette, ask the developer for the correct color.
 
+## Admin Dashboard
+
+The admin dashboard (`/admin`) uses shadcn/ui components, completely separate from the user-facing Fallout theme. When building admin pages, always use shadcn components from `@/components/admin/ui/` (Button, Table, Card, Badge, Input, Select, etc.) instead of writing raw HTML or using the shared Fallout components. The shadcn MCP tools are available for discovering and adding new components. Admin-specific components live in `@/components/admin/`, and all admin pages use `AdminLayout`.
+
 ## Comments
 
 Do not add comments unless absolutely necessary for clarity — code should be self-describing. No large comment blocks. **Exception**: code with non-obvious effects beyond its immediate scope — especially security, access control, or authorization — **MUST** have an inline comment explaining why it exists. Examples: access directives, policy scoping, before_action filters, session/cookie manipulation, and any logic whose removal would silently change access. If someone reading the code in isolation couldn't tell why a line is there, comment it.
