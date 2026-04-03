@@ -12,7 +12,8 @@ import {
   LayoutDashboard,
   Clock,
   ClipboardCheck,
-  Search,
+  Compass,
+  Hammer,
   FolderOpen,
   Users,
   Activity,
@@ -24,6 +25,10 @@ interface AdminStats {
   users_count: number
   projects_count: number
   pending_reviews_count: number
+  pending_time_audits_count: number
+  pending_requirements_checks_count: number
+  pending_design_reviews_count: number
+  pending_build_reviews_count: number
 }
 
 type NavItem = {
@@ -41,9 +46,25 @@ const navSections: { items: NavItem[]; adminOnly?: boolean }[] = [
   },
   {
     items: [
-      { label: 'Time Audit', href: '/admin/reviews', icon: Clock, statKey: 'pending_reviews_count' },
-      { label: 'Requirements Check', href: '/admin/reviews', icon: ClipboardCheck, statKey: null },
-      { label: 'Project Review', href: '/admin/reviews', icon: Search, statKey: null },
+      { label: 'Time Audit', href: '/admin/reviews/time_audits', icon: Clock, statKey: 'pending_time_audits_count' },
+      {
+        label: 'Requirements Check',
+        href: '/admin/reviews/requirements_checks',
+        icon: ClipboardCheck,
+        statKey: 'pending_requirements_checks_count',
+      },
+      {
+        label: 'Design Review',
+        href: '/admin/reviews/design_reviews',
+        icon: Compass,
+        statKey: 'pending_design_reviews_count',
+      },
+      {
+        label: 'Build Review',
+        href: '/admin/reviews/build_reviews',
+        icon: Hammer,
+        statKey: 'pending_build_reviews_count',
+      },
     ],
   },
   {

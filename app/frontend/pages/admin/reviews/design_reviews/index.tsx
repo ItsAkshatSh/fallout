@@ -1,0 +1,65 @@
+import type { ReactNode } from 'react'
+import { Link } from '@inertiajs/react'
+import type { ColumnDef } from '@tanstack/react-table'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Badge } from '@/components/admin/ui/badge'
+import { DataTable } from '@/components/admin/DataTable'
+import type { ReviewRow, PagyProps } from '@/types'
+
+const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  pending: 'secondary',
+  approved: 'default',
+  returned: 'destructive',
+  rejected: 'destructive',
+  cancelled: 'outline',
+}
+
+const columns: ColumnDef<ReviewRow>[] = [
+  {
+    accessorKey: 'id',
+    header: 'ID',
+    cell: ({ row }) => (
+      <Link href={`/admin/reviews/design_reviews/${row.original.id}`} className="text-muted-foreground hover:underline">
+        {row.original.id}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: 'project_name',
+    header: 'Project',
+    cell: ({ row }) => <span className="font-medium">{row.original.project_name}</span>,
+  },
+  {
+    accessorKey: 'user_display_name',
+    header: 'Owner',
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    cell: ({ row }) => (
+      <Badge variant={statusColors[row.original.status] ?? 'outline'} className="capitalize">
+        {row.original.status}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: 'reviewer_display_name',
+    header: 'Reviewer',
+    cell: ({ row }) => row.original.reviewer_display_name ?? <span className="text-muted-foreground">Unassigned</span>,
+  },
+  {
+    accessorKey: 'created_at',
+    header: 'Created',
+  },
+]
+
+export default function DesignReviewsIndex({ reviews, pagy }: { reviews: ReviewRow[]; pagy: PagyProps }) {
+  return (
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight mb-4">Design Review</h1>
+      <DataTable columns={columns} data={reviews} pagy={pagy} noun="reviews" />
+    </div>
+  )
+}
+
+DesignReviewsIndex.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

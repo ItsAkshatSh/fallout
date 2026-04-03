@@ -115,6 +115,15 @@ Rails.application.routes.draw do
   constraints Constraints::StaffConstraint.new do
     namespace :admin do
       get "/" => "dashboard#index", as: :root
+
+      # Per-type review queues must be defined before the catch-all ships resource
+      namespace :reviews do
+        resources :time_audits, only: [ :index, :show, :update ]
+        resources :requirements_checks, only: [ :index, :show, :update ]
+        resources :design_reviews, only: [ :index, :show, :update ]
+        resources :build_reviews, only: [ :index, :show, :update ]
+      end
+
       resources :ships, only: [ :index, :show, :edit, :update ], path: "reviews"
     end
   end

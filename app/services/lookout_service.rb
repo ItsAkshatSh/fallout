@@ -106,12 +106,16 @@ module LookoutService
     tempfile = Tempfile.new([ "lookout_video_", ".mp4" ])
     tempfile.binmode
 
-    response = Faraday.get(video_data["videoUrl"]) do |req|
-      req.options.timeout = 120
-      req.options.open_timeout = 10
+    # Lookout media URLs return 302 redirects to the actual file
+    uri = URI.parse(video_data["videoUrl"])
+    response = Net::HTTP.get_response(uri)
+    3.times do
+      break unless response.is_a?(Net::HTTPRedirection)
+      uri = URI.parse(response["location"])
+      response = Net::HTTP.get_response(uri)
     end
 
-    unless response.success?
+    unless response.is_a?(Net::HTTPSuccess)
       tempfile.close!
       return nil
     end
@@ -121,6 +125,7 @@ module LookoutService
     tempfile
   rescue StandardError => e
     ErrorReporter.capture_exception(e, contexts: { lookout: { action: "download_video" } })
+    tempfile&.close!
     nil
   end
 

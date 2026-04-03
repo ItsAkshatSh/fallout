@@ -8,7 +8,11 @@ class Admin::ApplicationController < ApplicationController
         {
           users_count: User.verified.count,
           projects_count: Project.count,
-          pending_reviews_count: Ship.pending.count
+          pending_reviews_count: Ship.pending.count,
+          pending_time_audits_count: TimeAuditReview.pending.count,
+          pending_requirements_checks_count: RequirementsCheckReview.pending.count,
+          pending_design_reviews_count: DesignReview.pending.count,
+          pending_build_reviews_count: BuildReview.pending.count
         }
       end
     }

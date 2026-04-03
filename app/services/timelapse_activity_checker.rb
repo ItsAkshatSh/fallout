@@ -7,20 +7,24 @@ class TimelapseActivityChecker
   HASH_WIDTH = 9
   HASH_HEIGHT = 8
 
-  def initialize(lookout_timelapse)
-    @timelapse = lookout_timelapse
+  # Extracted at 1fps of the compiled video. 1 frame = 1 video second ≈ 1 real minute.
+  # Only flag inactivity segments >= 2 real minutes (= 2 frames).
+  MIN_INACTIVE_DURATION = 2
+
+  def initialize(recordable)
+    @recordable = recordable
   end
 
   def run
-    video_file = LookoutService.download_video(@timelapse.session_token)
-    raise "Failed to download video for timelapse #{@timelapse.id}" unless video_file
+    video_file = download_video
+    raise "Failed to download video for #{@recordable.class.name} #{@recordable.id}" unless video_file
 
     run_on_file(video_file)
   ensure
     video_file&.close!
   end
 
-  # Analyze a video file directly (for testing without a LookoutTimelapse record).
+  # Analyze a video file directly (for testing without a record).
   def self.run_on_file(file)
     new(nil).run_on_file(file)
   end
@@ -38,21 +42,66 @@ class TimelapseActivityChecker
 
   private
 
+  def download_video
+    case @recordable
+    when LookoutTimelapse
+      LookoutService.download_video(@recordable.session_token)
+    when LapseTimelapse
+      download_from_url(@recordable.playback_url)
+    when YouTubeVideo
+      nil # YouTube downloads are unreliable due to bot detection; skip activity checking
+    end
+  end
+
+  def download_from_url(url)
+    return nil if url.blank?
+
+    ext = File.extname(URI.parse(url).path).presence || ".mp4"
+    tempfile = Tempfile.new([ "video_", ext ])
+    tempfile.binmode
+
+    # Follow redirects with Net::HTTP
+    uri = URI.parse(url)
+    response = Net::HTTP.get_response(uri)
+    # Follow up to 3 redirects
+    3.times do
+      break unless response.is_a?(Net::HTTPRedirection)
+      uri = URI.parse(response["location"])
+      response = Net::HTTP.get_response(uri)
+    end
+
+    unless response.is_a?(Net::HTTPSuccess)
+      tempfile.close!
+      return nil
+    end
+
+    tempfile.write(response.body)
+    tempfile.rewind
+    tempfile
+  rescue StandardError => e
+    ErrorReporter.capture_exception(e, contexts: { activity_check: { action: "download_from_url" } })
+    tempfile&.close!
+    nil
+  end
+
   def extract_frames(video_file)
     dir = Dir.mktmpdir("timelapse_frames_")
 
-    # Extract at 1fps — compiled timelapses play at 30fps, but each original
-    # screenshot is held for 30 frames. 1fps gives us the actual screenshots.
-    success = system(
-      "ffmpeg", "-i", video_file.path,
-      "-vf", "fps=1",
+    # Extract at 1fps — each frame = 1 second of the compiled timelapse
+    vf = "fps=1"
+
+    path = video_file.respond_to?(:path) ? video_file.path : video_file.to_s
+
+    system(
+      "ffmpeg", "-i", path,
+      "-vf", vf,
+      "-pix_fmt", "yuvj420p", # Ensure full-range YUV for MJPEG compatibility
       "-q:v", "2",
       File.join(dir, "frame_%04d.jpg"),
       %i[out err] => File::NULL
     )
 
-    raise "FFmpeg frame extraction failed" unless success
-
+    # Don't raise — very short videos may produce 0 frames, which run_on_file handles
     dir
   end
 
@@ -91,11 +140,14 @@ class TimelapseActivityChecker
     end
 
     segments = collapse_into_segments(inactive_pairs)
+      .select { |s| s[:duration_min] >= MIN_INACTIVE_DURATION }
+
+    inactive_frame_count = segments.sum { |s| s[:duration_min] }
 
     {
-      inactive_frames: inactive_pairs.size,
+      inactive_frames: inactive_frame_count,
       total_frames: total_frames,
-      inactive_percentage: (inactive_pairs.size.to_f / (total_frames - 1) * 100).round(1),
+      inactive_percentage: total_frames > 1 ? (inactive_frame_count.to_f / (total_frames - 1) * 100).round(1) : 0.0,
       segments: segments
     }
   end

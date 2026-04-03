@@ -1,0 +1,35 @@
+# frozen_string_literal: true
+
+class TimeAuditReviewPolicy < ApplicationPolicy
+  def index?
+    admin? || staff_reviewer?
+  end
+
+  def show?
+    admin? || staff_reviewer?
+  end
+
+  def update?
+    admin? || staff_reviewer? || assigned_reviewer?
+  end
+
+  private
+
+  def assigned_reviewer?
+    record.reviewer == user
+  end
+
+  def staff_reviewer?
+    user&.reviewer?
+  end
+
+  class Scope < ApplicationPolicy::Scope
+    def resolve
+      if user&.admin? || user&.reviewer?
+        scope.all # admins and reviewers need visibility into all reviews
+      else
+        scope.none
+      end
+    end
+  end
+end

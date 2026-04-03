@@ -251,3 +251,138 @@ export interface ShipForm {
   project_name: string
   user_display_name: string
 }
+
+export interface ReviewRow {
+  id: number
+  ship_id: number
+  project_name: string
+  user_display_name: string
+  status: string
+  reviewer_display_name: string | null
+  created_at: string
+}
+
+export interface TimeAuditReviewDetail {
+  id: number
+  ship_id: number
+  status: string
+  feedback: string | null
+  approved_seconds: number | null
+  annotations: TimeAuditAnnotations | null
+  reviewer_display_name: string | null
+  created_at: string
+}
+
+export interface TimeAuditAnnotations {
+  recordings?: Record<
+    string,
+    {
+      description?: string
+      segments?: TimeAuditSegment[]
+    }
+  >
+}
+
+export interface TimeAuditSegment {
+  recording_id: number
+  start_seconds: number
+  end_seconds: number
+  type: 'removed' | 'deflated'
+  reason: string
+  deflated_percent?: number
+}
+
+export interface InactiveSegment {
+  start_min: number
+  end_min: number
+  duration_min: number
+}
+
+export interface ReviewRecording {
+  id: number
+  type: string
+  duration: number
+  name: string
+  playback_url?: string
+  thumbnail_url?: string
+  video_id?: string
+  inactive_segments?: InactiveSegment[]
+  inactive_percentage?: number
+  activity_checked?: boolean
+}
+
+export interface ReviewJournalEntry {
+  id: number
+  content_html: string
+  images: string[]
+  author_display_name: string
+  author_avatar: string
+  created_at: string
+  created_at_iso: string
+  recordings: ReviewRecording[]
+  total_duration: number
+}
+
+export interface ReviewShipContext {
+  id: number
+  ship_type: string
+  status: string
+  created_at: string
+}
+
+export interface ReviewProjectContext {
+  id: number
+  name: string
+  description: string | null
+  repo_link: string | null
+  demo_link: string | null
+  user_id: number
+  user_display_name: string
+  user_avatar: string
+}
+
+export interface SiblingStatuses {
+  time_audit: string | null
+  requirements_check: string | null
+  design_review: string | null
+  build_review: string | null
+}
+
+export interface RequirementsCheckReviewDetail {
+  id: number
+  ship_id: number
+  status: string
+  feedback: string | null
+  internal_reason: string | null
+  reviewer_display_name: string | null
+  project_name: string
+  user_display_name: string
+  preflight_results: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface DesignReviewDetail {
+  id: number
+  ship_id: number
+  status: string
+  feedback: string | null
+  internal_reason: string | null
+  annotations: Record<string, unknown> | null
+  reviewer_display_name: string | null
+  project_name: string
+  user_display_name: string
+  created_at: string
+}
+
+export interface BuildReviewDetail {
+  id: number
+  ship_id: number
+  status: string
+  feedback: string | null
+  internal_reason: string | null
+  annotations: Record<string, unknown> | null
+  reviewer_display_name: string | null
+  project_name: string
+  user_display_name: string
+  created_at: string
+}
