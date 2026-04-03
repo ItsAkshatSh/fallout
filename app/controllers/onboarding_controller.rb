@@ -67,21 +67,25 @@ class OnboardingController < ApplicationController
     if last_step?(step["key"])
       complete_onboarding
     else
-      redirect_to onboarding_path
+      next_key = OnboardingConfig.step_keys[OnboardingConfig.step_keys.index(step["key"]) + 1]
+      redirect_to onboarding_path(step: next_key)
     end
   end
 
   private
 
-  # Allows navigating back to a previously answered step via ?step= param
+  # Allows navigating to a previously answered step or the next reachable step via ?step= param
   def requested_step
     return unless params[:step]
 
     step = OnboardingConfig.find_step(params[:step])
     return unless step
 
+    step_index = OnboardingConfig.step_keys.index(step["key"])
     answered_keys = current_user.onboarding_responses.pluck(:question_key)
-    step if answered_keys.include?(step["key"])
+
+    # Allow if this step is answered (revisiting) or the previous step is answered (advancing)
+    step if answered_keys.include?(step["key"]) || (step_index.zero? || answered_keys.include?(OnboardingConfig.step_keys[step_index - 1]))
   end
 
   def current_step
