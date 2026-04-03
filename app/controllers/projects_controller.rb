@@ -75,11 +75,26 @@ class ProjectsController < ApplicationController
     authorize @project
 
     if @project.save
-      # Redirect to path when created from the onboarding modal so it closes and tooltips update
-      destination = params[:return_to] == "path" ? path_path : @project
-      redirect_to destination, notice: "Project created."
+      if request.headers["X-InertiaUI-Modal"].present? && params[:return_to] != "path"
+        head :no_content
+      else
+        # Onboarding flows use return_to to land on /path autoopen the projects modal
+        destination = case params[:return_to]
+        when "path"
+          path_path
+        when "path_projects"
+          path_path(open: "projects", nudge: "read_docs")
+        else
+          projects_path
+        end
+        redirect_to destination, notice: "Project created."
+      end
     else
-      redirect_back fallback_location: new_project_path, inertia: { errors: @project.errors.messages }
+      if request.headers["X-InertiaUI-Modal"].present? && params[:return_to] != "path"
+        render json: { errors: @project.errors.messages }, status: :unprocessable_entity
+      else
+        redirect_back fallback_location: new_project_path, inertia: { errors: @project.errors.messages }
+      end
     end
   end
 
@@ -104,16 +119,36 @@ class ProjectsController < ApplicationController
     authorize @project
 
     if @project.update(project_params)
-      redirect_to @project, notice: "Project updated."
+      if request.headers["X-InertiaUI-Modal"].present?
+        head :no_content
+      else
+        redirect_to @project, notice: "Project updated."
+      end
     else
-      redirect_back fallback_location: edit_project_path(@project), inertia: { errors: @project.errors.messages }
+      if request.headers["X-InertiaUI-Modal"].present?
+        render json: { errors: @project.errors.messages }, status: :unprocessable_entity
+      else
+        redirect_back fallback_location: edit_project_path(@project), inertia: { errors: @project.errors.messages }
+      end
     end
   end
 
   def destroy
     authorize @project
-    @project.discard
-    redirect_to projects_path, notice: "Project deleted."
+
+    if @project.discard
+      if request.headers["X-InertiaUI-Modal"].present?
+        head :no_content
+      else
+        redirect_to projects_path, notice: "Project deleted."
+      end
+    else
+      if request.headers["X-InertiaUI-Modal"].present?
+        render json: { errors: @project.errors.messages }, status: :unprocessable_entity
+      else
+        redirect_back fallback_location: project_path(@project), inertia: { errors: @project.errors.messages }
+      end
+    end
   end
 
   private
