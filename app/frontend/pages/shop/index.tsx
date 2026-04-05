@@ -90,7 +90,7 @@ export default function ShopIndex({
   })
 
   const content = (
-    <div className="w-full mx-auto p-2 xs:p-4 md:p-8 h-full">
+    <div className="w-full mx-auto p-2 xs:p-4 md:p-8 h-full overflow-y-auto">
       <div className="flex flex-col items-start">
         <div className="flex w-full items-center justify-between">
           <div className="flex items-center">
@@ -118,7 +118,7 @@ export default function ShopIndex({
         <span className="text-sm mt-2 font-bold">Tip: Click on the star to pin an item!</span>
         <ul
           ref={listRef}
-          className={`mt-6 mb-12 h-full w-full grid gap-4 grid-cols-1 xs:grid-cols-2 ${is_modal ? 'lg:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'}`}
+          className={`mt-6 mb-12 w-full grid gap-4 grid-cols-1 xs:grid-cols-2 ${is_modal ? 'lg:grid-cols-3' : 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5'}`}
         >
           {sortedItems.map((item) => {
             const isTicket = item.ticket
@@ -149,7 +149,7 @@ export default function ShopIndex({
                     <path d="M11.7967 0.316774C12.4608 -0.388533 13.6394 0.167963 13.5167 1.12889L12.8879 6.05537C12.833 6.48511 13.0611 6.90129 13.4529 7.08626L17.9439 9.20671C18.8199 9.62031 18.6549 10.9132 17.7031 11.0935L12.8234 12.0178C12.3977 12.0984 12.0724 12.444 12.0175 12.8737L11.3887 17.8002C11.266 18.7611 9.98537 19.0037 9.51979 18.1542L7.13283 13.7989C6.92462 13.419 6.49545 13.2164 6.0698 13.297L1.19011 14.2213C0.238311 14.4016 -0.388126 13.2586 0.275927 12.5533L3.6804 8.93731C3.97737 8.62189 4.03746 8.15111 3.82925 7.7712L1.44229 3.41597C0.976711 2.56646 1.87019 1.61748 2.74618 2.03108L7.23721 4.15152C7.62897 4.33649 8.09527 4.24817 8.39224 3.93274L11.7967 0.316774Z" />
                   </svg>
                 </button>
-                <span className="text-2xl font-bold leading-6 text-dark-brown pb-1">{item.name}</span>
+                <span className="text-2xl font-bold leading-6 text-dark-brown pb-1 break-words min-w-0">{item.name}</span>
 
                 <div className="w-full h-50 p-4 rounded-sm border-3 border-dark-brown bg-beige relative overflow-hidden flex items-center justify-center">
                   {item.image_url && (
@@ -157,7 +157,7 @@ export default function ShopIndex({
                   )}
                 </div>
                 <div className="py-1 flex items-start justify-between gap-4">
-                  <span className="leading-tight text-base">{item.description}</span>
+                  <span className="leading-tight text-base min-w-0 break-words">{item.description}</span>
                   {isTicket ? (
                     <span className="text-2xl font-bold text-dark-brown shrink-0">{item.price}h</span>
                   ) : (
