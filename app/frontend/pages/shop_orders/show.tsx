@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Link } from '@inertiajs/react'
 import Confetti from '@/components/shared/Confetti'
 
@@ -15,12 +15,16 @@ type ShopItem = {
   image_url: string
 }
 
-export default function ShopOrderShow({ shop_item, order }: { shop_item: ShopItem; order: Order }) {
-  const [confetti, setConfetti] = useState(false)
-
-  useEffect(() => {
-    setConfetti(true)
-  }, [])
+export default function ShopOrderShow({
+  shop_item,
+  order,
+  just_purchased,
+}: {
+  shop_item: ShopItem
+  order: Order
+  just_purchased?: boolean
+}) {
+  const [confetti, setConfetti] = useState(!!just_purchased)
 
   return (
     <>

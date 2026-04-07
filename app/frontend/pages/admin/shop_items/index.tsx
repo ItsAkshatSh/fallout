@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { ReactNode } from 'react'
 import { router, usePage } from '@inertiajs/react'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Button } from '@/components/admin/ui/button'
+import { Alert, AlertDescription } from '@/components/admin/ui/alert'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/admin/ui/table'
 import type { SharedProps } from '@/types'
 
 type ShopItem = {
@@ -43,7 +48,7 @@ function isDirty(original: ShopItem, current: RowState) {
 
 const KOI_PER_USD = 7 / 5
 
-const inputClass = 'w-full border border-dark-brown bg-light-brown text-dark-brown px-2 py-1 rounded-xs text-sm'
+const inputClass = 'w-full border border-input rounded-md px-2 py-1 text-sm'
 
 function EditableRow({
   label,
@@ -65,7 +70,6 @@ function EditableRow({
   error?: string
 }) {
   const [usdInput, setUsdInput] = useState(() => (row.ticket ? '' : String(+(row.price / KOI_PER_USD).toFixed(2))))
-  // Track when USD field triggered the price change so we don't overwrite it
   const skipSyncRef = useRef(false)
 
   useEffect(() => {
@@ -89,30 +93,30 @@ function EditableRow({
   )
 
   return (
-    <tr className="border-b border-brown align-top">
-      <td className="py-2 pr-3">
+    <TableRow className="align-top">
+      <TableCell>
         <select value={row.status} onChange={(e) => onChange('status', e.target.value)} className={inputClass}>
           <option value="available">Available</option>
           <option value="unavailable">Unavailable</option>
         </select>
-      </td>
-      <td className="py-2 pr-3 text-center">
+      </TableCell>
+      <TableCell className="text-center">
         <input
           type="checkbox"
           checked={!!row.featured}
           onChange={(e) => onChange('featured', e.target.checked)}
-          className="w-4 h-4 accent-brown cursor-pointer"
+          className="w-4 h-4 cursor-pointer"
         />
-      </td>
-      <td className="py-2 pr-3 text-center">
+      </TableCell>
+      <TableCell className="text-center">
         <input
           type="checkbox"
           checked={!!row.ticket}
           onChange={(e) => onChange('ticket', e.target.checked)}
-          className="w-4 h-4 accent-brown cursor-pointer"
+          className="w-4 h-4 cursor-pointer"
         />
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell>
         <input
           type="text"
           value={row.name}
@@ -120,8 +124,8 @@ function EditableRow({
           className={inputClass}
           placeholder={label}
         />
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell>
         <div className="flex items-center gap-1">
           <input
             type="number"
@@ -130,13 +134,13 @@ function EditableRow({
             onChange={(e) => onChange('price', e.target.value)}
             className={inputClass}
           />
-          <span className="text-xs text-dark-brown shrink-0">{row.ticket ? 'h' : 'koi'}</span>
+          <span className="text-xs text-muted-foreground shrink-0">{row.ticket ? 'h' : 'koi'}</span>
         </div>
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell>
         {!row.ticket && (
           <div className="flex items-center gap-1">
-            <span className="text-xs text-dark-brown shrink-0">$</span>
+            <span className="text-xs text-muted-foreground shrink-0">$</span>
             <input
               type="number"
               value={usdInput}
@@ -147,23 +151,19 @@ function EditableRow({
             />
           </div>
         )}
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell>
         <textarea
           value={row.description}
           rows={2}
           onChange={(e) => onChange('description', e.target.value)}
           className={inputClass}
         />
-      </td>
-      <td className="py-2 pr-3">
+      </TableCell>
+      <TableCell>
         <div className="flex gap-2 items-start">
           {row.image_url && (
-            <img
-              src={row.image_url}
-              alt=""
-              className="w-10 h-10 object-cover rounded-xs shrink-0 border border-dark-brown"
-            />
+            <img src={row.image_url} alt="" className="w-10 h-10 object-cover rounded shrink-0 border border-border" />
           )}
           <input
             type="text"
@@ -173,28 +173,21 @@ function EditableRow({
             placeholder="https://..."
           />
         </div>
-      </td>
-      <td className="py-2 whitespace-nowrap">
-        {error && <p className="text-xs text-red-600 mb-1">{error}</p>}
+      </TableCell>
+      <TableCell className="whitespace-nowrap">
+        {error && <p className="text-xs text-destructive mb-1">{error}</p>}
         <div className="flex gap-2">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-4 py-1 rounded-xs hover:opacity-80 disabled:opacity-40 text-sm"
-          >
+          <Button size="sm" variant="outline" onClick={onSave} disabled={saving}>
             {saving ? 'Saving...' : saveLabel}
-          </button>
+          </Button>
           {onDelete && (
-            <button
-              onClick={onDelete}
-              className="border-2 border-dark-brown text-dark-brown font-bold px-4 py-1 rounded-xs hover:opacity-80 text-sm"
-            >
+            <Button size="sm" variant="destructive" onClick={onDelete}>
               Delete
-            </button>
+            </Button>
           )}
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -274,55 +267,51 @@ export default function AdminShopItemsIndex({ shop_items }: { shop_items: ShopIt
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-bold text-4xl text-dark-brown">Shop Items</h1>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Shop Items</h1>
         <div className="flex gap-2">
           {shop_items.some((item) => isDirty(item, rows[item.id])) && (
-            <button
-              onClick={saveAll}
-              className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-4 py-2 rounded-xs hover:opacity-80 text-sm"
-            >
+            <Button variant="outline" size="sm" onClick={saveAll}>
               Save All
-            </button>
+            </Button>
           )}
           {!newRow && (
-            <button
-              onClick={() => setNewRow({ ...BLANK_ROW })}
-              className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-4 py-2 rounded-xs hover:opacity-80 text-sm"
-            >
+            <Button variant="outline" size="sm" onClick={() => setNewRow({ ...BLANK_ROW })}>
               + New Item
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {Object.keys(errors).length > 0 && (
-        <div className="border-2 border-dark-brown text-dark-brown p-3 mb-4 rounded-xs text-sm">
-          {Object.values(errors)
-            .flat()
-            .map((msg, i) => (
-              <p key={i}>{msg}</p>
-            ))}
-        </div>
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            {Object.values(errors)
+              .flat()
+              .map((msg, i) => (
+                <p key={i}>{msg}</p>
+              ))}
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-dark-brown text-sm border-collapse">
-          <thead>
-            <tr className="border-b-2 border-dark-brown text-left">
-              <th className="pb-2 pr-3 whitespace-nowrap">Status</th>
-              <th className="pb-2 pr-3 whitespace-nowrap">Featured</th>
-              <th className="pb-2 pr-3 whitespace-nowrap">Ticket</th>
-              <th className="pb-2 pr-3 min-w-36">Name</th>
-              <th className="pb-2 pr-3 min-w-16">Price</th>
-              <th className="pb-2 pr-3 min-w-16">USD</th>
-              <th className="pb-2 pr-3 min-w-52">Description</th>
-              <th className="pb-2 pr-3 min-w-48">Image URL</th>
-              <th className="pb-2"></th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="whitespace-nowrap">Status</TableHead>
+              <TableHead className="whitespace-nowrap">Featured</TableHead>
+              <TableHead className="whitespace-nowrap">Ticket</TableHead>
+              <TableHead className="min-w-36">Name</TableHead>
+              <TableHead className="min-w-16">Price</TableHead>
+              <TableHead className="min-w-16">USD</TableHead>
+              <TableHead className="min-w-52">Description</TableHead>
+              <TableHead className="min-w-48">Image URL</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {shop_items.map((item) => {
               const row = rows[item.id]
               if (!row) return null
@@ -350,11 +339,18 @@ export default function AdminShopItemsIndex({ shop_items }: { shop_items: ShopIt
                 saving={creating}
               />
             )}
-          </tbody>
-        </table>
-
-        {shop_items.length === 0 && !newRow && <p className="text-dark-brown mt-8 text-center">No shop items yet.</p>}
+            {shop_items.length === 0 && !newRow && (
+              <TableRow>
+                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                  No shop items yet.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   )
 }
+
+AdminShopItemsIndex.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

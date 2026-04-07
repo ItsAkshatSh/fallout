@@ -307,17 +307,11 @@ class User < ApplicationRecord
   end
 
   def total_time_logged_seconds
-    project_ids = projects.kept.pluck(:id)
-    return 0 if project_ids.empty?
+    entry_scope = { project_id: projects.kept.select(:id), discarded_at: nil }
 
-    lapse = LapseTimelapse.joins(recording: :journal_entry)
-      .where(journal_entries: { project_id: project_ids, discarded_at: nil }).sum(:duration).to_i
-    youtube = YouTubeVideo.joins(recording: :journal_entry)
-      .where(journal_entries: { project_id: project_ids, discarded_at: nil }).sum(:duration_seconds).to_i
-    lookout = LookoutTimelapse.joins(recording: :journal_entry)
-      .where(journal_entries: { project_id: project_ids, discarded_at: nil }).sum(:duration).to_i
-
-    lapse + youtube + lookout
+    LapseTimelapse.joins(recording: :journal_entry).where(journal_entries: entry_scope).sum(:duration).to_i +
+      YouTubeVideo.joins(recording: :journal_entry).where(journal_entries: entry_scope).sum(:duration_seconds).to_i +
+      LookoutTimelapse.joins(recording: :journal_entry).where(journal_entries: entry_scope).sum(:duration).to_i
   end
 
   def koi

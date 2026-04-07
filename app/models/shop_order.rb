@@ -52,7 +52,6 @@ class ShopOrder < ApplicationRecord
       "order_id"            => :id,
       "verification_status" => ->(o) { o.user.verification_status },
       "user"                => ->(o) { o.user.display_name },
-      "slack_id"            => ->(o) { o.user.slack_id },
       "address"             => :address,
       "created_at"          => ->(o) { o.created_at&.iso8601 },
       "item"                => ->(o) { o.shop_item&.name },

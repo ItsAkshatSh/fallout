@@ -225,7 +225,7 @@ Rails.application.routes.draw do
     get :record, on: :collection # Token-based recording page: /lookout_sessions/record?token=...
   end
 
-  resources :shop_items, path: "shop" do # Koi shop
+  resources :shop_items, path: "shop", only: [ :index, :show ] do # Koi shop (admin CRUD via /admin/shop_items)
     resources :shop_orders, only: [ :new, :create, :show ], path: "orders" # Purchase flow
   end
 

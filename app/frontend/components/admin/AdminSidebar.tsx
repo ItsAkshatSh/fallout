@@ -17,10 +17,12 @@ import {
   Hammer,
   FolderOpen,
   Users,
-  Activity,
   SlidersHorizontal,
   BriefcaseBusiness,
   Flag,
+  Store,
+  ShoppingCart,
+  Fish,
 } from 'lucide-react'
 
 interface AdminStats {
@@ -111,6 +113,25 @@ function buildNavSections(): { items: NavItem[] }[] {
     },
     {
       items: [
+        { label: 'Shop Items', href: '/admin/shop_items', icon: Store, statKey: null, requirePermission: 'is_admin' },
+        {
+          label: 'Shop Orders',
+          href: '/admin/shop_orders',
+          icon: ShoppingCart,
+          statKey: null,
+          requirePermission: 'is_admin',
+        },
+        {
+          label: 'Koi Transactions',
+          href: '/admin/koi_transactions',
+          icon: Fish,
+          statKey: null,
+          requirePermission: 'is_admin',
+        },
+      ],
+    },
+    {
+      items: [
         {
           label: 'Jobs',
           href: '/jobs',
@@ -124,17 +145,6 @@ function buildNavSections(): { items: NavItem[] }[] {
           href: '/flipper',
           icon: SlidersHorizontal,
           external: true,
-          statKey: null,
-          requirePermission: 'is_admin',
-        },
-      ],
-    },
-    {
-      items: [
-        {
-          label: 'Activity Checks',
-          href: '/admin/activity_checks/new',
-          icon: Activity,
           statKey: null,
           requirePermission: 'is_admin',
         },

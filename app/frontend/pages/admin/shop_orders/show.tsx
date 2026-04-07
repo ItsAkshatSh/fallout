@@ -1,12 +1,20 @@
-import { useForm } from '@inertiajs/react'
+import type { ReactNode } from 'react'
+import { useForm, Link } from '@inertiajs/react'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Button } from '@/components/admin/ui/button'
+import { Card, CardContent } from '@/components/admin/ui/card'
+import { Badge } from '@/components/admin/ui/badge'
 
 type Order = {
   id: number
   user: { id: number; display_name: string; email: string }
   shop_item: { id: number; name: string }
   frozen_price: number
+  quantity: number
+  total_cost: number
   state: string
   address: string | null
+  phone: string | null
   admin_note: string | null
   created_at: string
   user_koi_balance: number
@@ -26,74 +34,97 @@ export default function AdminShopOrderShow({ order }: { order: Order }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-8 text-dark-brown">
-      <div className="mb-2">
-        <a href="/admin/shop_orders" className="text-sm font-bold underline hover:opacity-80">
+    <div className="max-w-2xl">
+      <div className="mb-4">
+        <Link href="/admin/shop_orders" className="text-sm text-primary hover:underline">
           ← All Orders
-        </a>
+        </Link>
       </div>
-      <h1 className="font-bold text-4xl text-dark-brown mb-6">Order #{order.id}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Order #{order.id}</h1>
 
-      <div className="border-2 border-dark-brown rounded-xs p-4 mb-6 space-y-1">
-        <p>
-          <span className="font-bold">User:</span> {order.user.display_name} ({order.user.email})
-        </p>
-        <p>
-          <span className="font-bold">Current koi balance:</span> {order.user_koi_balance} koi
-        </p>
-        <p>
-          <span className="font-bold">Item:</span> {order.shop_item.name}
-        </p>
-        <p>
-          <span className="font-bold">Price at order time:</span> {order.frozen_price} koi
-        </p>
-        <p>
-          <span className="font-bold">Shipping address:</span>{' '}
-          {order.address ?? <span className="italic">not provided</span>}
-        </p>
-        <p>
-          <span className="font-bold">Ordered:</span> {order.created_at}
-        </p>
-      </div>
+      <Card className="mb-6">
+        <CardContent className="pt-6 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">User</span>
+            <span className="font-medium">
+              {order.user.display_name} ({order.user.email})
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Current koi balance</span>
+            <span>{order.user_koi_balance} koi</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Item</span>
+            <span>{order.shop_item.name}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Price at order time</span>
+            <span>
+              {order.frozen_price} koi{order.quantity > 1 && ` × ${order.quantity} = ${order.total_cost} koi`}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Shipping address</span>
+            <span className="text-right whitespace-pre-line max-w-xs">
+              {order.address ?? <span className="italic text-muted-foreground">not provided</span>}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Phone</span>
+            <span>{order.phone ?? <span className="italic text-muted-foreground">not provided</span>}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Ordered</span>
+            <span>{order.created_at}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">State</span>
+            <Badge variant="outline">{order.state}</Badge>
+          </div>
+        </CardContent>
+      </Card>
 
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="block font-bold mb-1">State</label>
-          <select
-            value={form.data.state}
-            onChange={(e) => form.setData('state', e.target.value)}
-            className="w-full border-2 border-dark-brown bg-light-brown p-2 rounded-xs"
-          >
-            {STATES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs mt-1">
-            Rejecting refunds the user's koi automatically (order drops from their balance calculation).
-          </p>
-        </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={submit} className="space-y-4">
+            <label className="block">
+              <span className="block text-sm font-medium mb-1.5">State</span>
+              <select
+                value={form.data.state}
+                onChange={(e) => form.setData('state', e.target.value)}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm"
+              >
+                {STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Rejecting refunds the user's koi automatically (order drops from their balance calculation).
+              </p>
+            </label>
 
-        <div>
-          <label className="block font-bold mb-1">Admin Note</label>
-          <textarea
-            value={form.data.admin_note}
-            onChange={(e) => form.setData('admin_note', e.target.value)}
-            rows={3}
-            placeholder="Tracking number, notes, etc."
-            className="w-full border-2 border-dark-brown bg-light-brown p-2 rounded-xs"
-          />
-        </div>
+            <label className="block">
+              <span className="block text-sm font-medium mb-1.5">Admin Note</span>
+              <textarea
+                value={form.data.admin_note}
+                onChange={(e) => form.setData('admin_note', e.target.value)}
+                rows={3}
+                placeholder="Tracking number, notes, etc."
+                className="w-full border border-input rounded-md px-3 py-2 text-sm"
+              />
+            </label>
 
-        <button
-          type="submit"
-          disabled={form.processing}
-          className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-6 py-2 rounded-xs hover:opacity-80 disabled:opacity-50"
-        >
-          {form.processing ? 'Saving...' : 'Save Changes'}
-        </button>
-      </form>
+            <Button type="submit" disabled={form.processing}>
+              {form.processing ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
+
+AdminShopOrderShow.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

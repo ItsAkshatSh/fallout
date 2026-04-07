@@ -1,4 +1,9 @@
-import { useForm, usePage } from '@inertiajs/react'
+import type { ReactNode } from 'react'
+import { useForm, usePage, Link } from '@inertiajs/react'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Button } from '@/components/admin/ui/button'
+import { Card, CardContent } from '@/components/admin/ui/card'
+import { Alert, AlertDescription } from '@/components/admin/ui/alert'
 import type { SharedProps } from '@/types'
 
 export default function AdminKoiTransactionsNew({ prefill_user_id }: { prefill_user_id: string }) {
@@ -15,69 +20,73 @@ export default function AdminKoiTransactionsNew({ prefill_user_id }: { prefill_u
   }
 
   return (
-    <div className="max-w-lg mx-auto p-8 text-dark-brown">
-      <div className="mb-2">
-        <a href="/admin/koi_transactions" className="text-sm font-bold underline hover:opacity-80">
+    <div className="max-w-lg">
+      <div className="mb-4">
+        <Link href="/admin/koi_transactions" className="text-sm text-primary hover:underline">
           ← Transactions
-        </a>
+        </Link>
       </div>
-      <h1 className="font-bold text-4xl text-dark-brown mb-6">Adjust Koi</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mb-6">Adjust Koi</h1>
 
       {Object.keys(errors).length > 0 && (
-        <div className="border-2 border-dark-brown p-4 mb-4 rounded-xs">
-          {Object.values(errors)
-            .flat()
-            .map((msg, i) => (
-              <p key={i}>{msg}</p>
-            ))}
-        </div>
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>
+            {Object.values(errors)
+              .flat()
+              .map((msg, i) => (
+                <p key={i}>{msg}</p>
+              ))}
+          </AlertDescription>
+        </Alert>
       )}
 
-      <form onSubmit={submit} className="space-y-4">
-        <div>
-          <label className="block font-bold mb-1">User ID</label>
-          <input
-            type="number"
-            value={form.data.user_id}
-            onChange={(e) => form.setData('user_id', e.target.value)}
-            required
-            className="w-full border-2 border-dark-brown bg-light-brown p-2 rounded-xs"
-            placeholder="User ID (find on /admin/users)"
-          />
-        </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={submit} className="space-y-4">
+            <label className="block">
+              <span className="block text-sm font-medium mb-1.5">User ID</span>
+              <input
+                type="number"
+                value={form.data.user_id}
+                onChange={(e) => form.setData('user_id', e.target.value)}
+                required
+                className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                placeholder="User ID (find on /admin/users)"
+              />
+            </label>
 
-        <div>
-          <label className="block font-bold mb-1">Amount</label>
-          <input
-            type="number"
-            value={form.data.amount}
-            onChange={(e) => form.setData('amount', e.target.value)}
-            required
-            className="w-full border-2 border-dark-brown bg-light-brown p-2 rounded-xs"
-            placeholder="Positive to add, negative to deduct (e.g. -10)"
-          />
-        </div>
+            <label className="block">
+              <span className="block text-sm font-medium mb-1.5">Amount</span>
+              <input
+                type="number"
+                value={form.data.amount}
+                onChange={(e) => form.setData('amount', e.target.value)}
+                required
+                className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                placeholder="Positive to add, negative to deduct (e.g. -10)"
+              />
+            </label>
 
-        <div>
-          <label className="block font-bold mb-1">Description</label>
-          <textarea
-            value={form.data.description}
-            onChange={(e) => form.setData('description', e.target.value)}
-            required
-            rows={3}
-            className="w-full border-2 border-dark-brown bg-light-brown p-2 rounded-xs"
-            placeholder="Reason for adjustment (e.g. 'bonus for summit help')"
-          />
-        </div>
+            <label className="block">
+              <span className="block text-sm font-medium mb-1.5">Description</span>
+              <textarea
+                value={form.data.description}
+                onChange={(e) => form.setData('description', e.target.value)}
+                required
+                rows={3}
+                className="w-full border border-input rounded-md px-3 py-2 text-sm"
+                placeholder="Reason for adjustment (e.g. 'bonus for summit help')"
+              />
+            </label>
 
-        <button
-          type="submit"
-          disabled={form.processing}
-          className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-6 py-2 rounded-xs hover:opacity-80 disabled:opacity-50"
-        >
-          {form.processing ? 'Saving...' : 'Save Adjustment'}
-        </button>
-      </form>
+            <Button type="submit" disabled={form.processing}>
+              {form.processing ? 'Saving...' : 'Save Adjustment'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }
+
+AdminKoiTransactionsNew.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

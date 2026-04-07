@@ -1,88 +1,102 @@
+import type { ReactNode } from 'react'
 import { Link, router } from '@inertiajs/react'
+import type { ColumnDef } from '@tanstack/react-table'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Badge } from '@/components/admin/ui/badge'
+import { Button } from '@/components/admin/ui/button'
+import { DataTable } from '@/components/admin/DataTable'
+import type { PagyProps } from '@/types'
 
 type Order = {
   id: number
   user: { id: number; display_name: string; email: string }
   shop_item: { id: number; name: string }
   frozen_price: number
+  quantity: number
+  total_cost: number
   state: string
   created_at: string
 }
 
-const STATE_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  fulfilled: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  on_hold: 'bg-gray-100 text-gray-800',
+const STATE_VARIANTS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  pending: 'outline',
+  fulfilled: 'default',
+  rejected: 'destructive',
+  on_hold: 'secondary',
 }
+
+const columns: ColumnDef<Order>[] = [
+  {
+    accessorKey: 'user',
+    header: 'User',
+    cell: ({ row }) => (
+      <div>
+        <span className="font-medium">{row.original.user.display_name}</span>
+        <p className="text-xs text-muted-foreground">{row.original.user.email}</p>
+      </div>
+    ),
+  },
+  {
+    accessorKey: 'shop_item',
+    header: 'Item',
+    cell: ({ row }) => row.original.shop_item.name,
+  },
+  {
+    accessorKey: 'total_cost',
+    header: 'Price',
+    cell: ({ row }) => `${row.original.total_cost} koi`,
+  },
+  {
+    accessorKey: 'state',
+    header: 'State',
+    cell: ({ row }) => <Badge variant={STATE_VARIANTS[row.original.state] ?? 'outline'}>{row.original.state}</Badge>,
+  },
+  { accessorKey: 'created_at', header: 'Date' },
+  {
+    id: 'actions',
+    cell: ({ row }) => (
+      <Link href={`/admin/shop_orders/${row.original.id}`} className="text-primary hover:underline text-sm">
+        Manage
+      </Link>
+    ),
+  },
+]
+
+const STATES = ['', 'pending', 'fulfilled', 'rejected', 'on_hold']
 
 export default function AdminShopOrdersIndex({
   orders,
   state_filter,
+  pagy,
 }: {
   orders: Order[]
   state_filter: string
-  pagy: unknown
+  pagy: PagyProps
 }) {
   function filterByState(state: string) {
     router.get('/admin/shop_orders', state ? { state } : {}, { preserveState: true })
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-bold text-4xl text-dark-brown">Shop Orders</h1>
-      </div>
+    <div>
+      <h1 className="text-2xl font-semibold tracking-tight mb-4">Shop Orders</h1>
 
-      <div className="flex gap-2 mb-6">
-        {['', 'pending', 'fulfilled', 'rejected', 'on_hold'].map((s) => (
-          <button
+      <div className="flex gap-1.5 mb-4">
+        {STATES.map((s) => (
+          <Button
             key={s}
+            variant={state_filter === s ? 'default' : 'outline'}
+            size="sm"
             onClick={() => filterByState(s)}
-            className={`px-3 py-1 border-2 border-dark-brown font-bold text-sm rounded-xs ${state_filter === s ? 'bg-dark-brown text-light-brown' : 'text-dark-brown hover:opacity-80'}`}
           >
             {s || 'All'}
-          </button>
+          </Button>
         ))}
       </div>
 
-      <table className="w-full text-dark-brown text-sm">
-        <thead>
-          <tr className="border-b-2 border-dark-brown text-left">
-            <th className="pb-2 pr-4">User</th>
-            <th className="pb-2 pr-4">Item</th>
-            <th className="pb-2 pr-4">Price</th>
-            <th className="pb-2 pr-4">State</th>
-            <th className="pb-2 pr-4">Date</th>
-            <th className="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id} className="border-b border-brown">
-              <td className="py-2 pr-4">
-                <p className="font-bold">{order.user.display_name}</p>
-                <p className="text-xs">{order.user.email}</p>
-              </td>
-              <td className="py-2 pr-4">{order.shop_item.name}</td>
-              <td className="py-2 pr-4">{order.frozen_price} koi</td>
-              <td className="py-2 pr-4">
-                <span className={`px-2 py-0.5 rounded text-xs font-bold ${STATE_COLORS[order.state] ?? ''}`}>
-                  {order.state}
-                </span>
-              </td>
-              <td className="py-2 pr-4">{order.created_at}</td>
-              <td className="py-2">
-                <Link href={`/admin/shop_orders/${order.id}`} className="font-bold underline hover:opacity-80">
-                  Manage
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {orders.length === 0 && <p className="text-dark-brown mt-8 text-center">No orders found.</p>}
+      <DataTable columns={columns} data={orders} pagy={pagy} noun="orders" />
     </div>
   )
 }
+
+AdminShopOrdersIndex.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

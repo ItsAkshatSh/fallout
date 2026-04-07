@@ -14,13 +14,13 @@ class SeedShopItems < ActiveRecord::Migration[8.1]
       { name: "Bambu Lab A1 Mini", description: "awesome printer", price: 110, image_url: "https://cdn.hackclub.com/019d5b4e-f11e-764b-b860-9e44624edb02/a1mini.webp", status: "unavailable", featured: false, ticket: false },
       { name: "Ticket to Fallout", description: "Visit Shenzhen, China, July 1-7th! Claim at 60 approved hours.", price: 60, image_url: "https://cdn.hackclub.com/019d5ed7-69be-7db6-88f9-2062a45e4df1/ticket.webp", status: "available", featured: true, ticket: true },
       { name: "Travel Grant", description: "$85 (USD) Travel Grant", price: 10, image_url: "https://cdn.hackclub.com/019d5ed7-66ea-7ba6-aa85-4ccde23e31aa/travelgrant.webp", status: "available", featured: true, ticket: false },
-      { name: "eSIM Grant", description: "$10 eSIM grant", price: 14, image_url: "https://cdn.hackclub.com/019d6859-efae-7b94-b028-39fc8aa4cd68/airalo.webp", status: "unavailable", featured: false, ticket: false },
+      { name: "eSIM Grant", description: "$10 eSIM grant", price: 14, image_url: "https://cdn.hackclub.com/019d6859-efae-7b94-b028-39fc8aa4cd68/airalo.webp", status: "unavailable", featured: false, ticket: false }
     ])
   end
 
   def down
-    ShopItem.where(name: ["Web Cam", "Bench Power Supply", "Keycaps", "Fume Extractor", "Stickers",
+    ShopItem.where(name: [ "Web Cam", "Bench Power Supply", "Keycaps", "Fume Extractor", "Stickers",
                            "Flipper Zero", "Fallout 4 (the game)", "Pinecil", "Renran", "Bambu Lab P1S",
-                           "Bambu Lab A1 Mini", "Ticket to Fallout", "Travel Grant", "eSIM Grant"]).destroy_all
+                           "Bambu Lab A1 Mini", "Ticket to Fallout", "Travel Grant", "eSIM Grant" ]).destroy_all
   end
 end

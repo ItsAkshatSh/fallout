@@ -1,4 +1,11 @@
+import type { ReactNode } from 'react'
 import { Link } from '@inertiajs/react'
+import type { ColumnDef } from '@tanstack/react-table'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Badge } from '@/components/admin/ui/badge'
+import { Button } from '@/components/admin/ui/button'
+import { DataTable } from '@/components/admin/DataTable'
+import type { PagyProps } from '@/types'
 
 type Transaction = {
   id: number
@@ -10,59 +17,65 @@ type Transaction = {
   created_at: string
 }
 
+const columns: ColumnDef<Transaction>[] = [
+  {
+    accessorKey: 'user',
+    header: 'User',
+    cell: ({ row }) => <span className="font-medium">{row.original.user.display_name}</span>,
+  },
+  {
+    accessorKey: 'amount',
+    header: 'Amount',
+    cell: ({ row }) => (
+      <span className={`font-medium ${row.original.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
+        {row.original.amount > 0 ? `+${row.original.amount}` : row.original.amount} koi
+      </span>
+    ),
+  },
+  { accessorKey: 'reason', header: 'Reason' },
+  { accessorKey: 'description', header: 'Description' },
+  {
+    accessorKey: 'actor',
+    header: 'By',
+    cell: ({ row }) => row.original.actor.display_name,
+  },
+  { accessorKey: 'created_at', header: 'Date' },
+]
+
 export default function AdminKoiTransactionsIndex({
   transactions,
   user_id_filter,
+  pagy,
 }: {
   transactions: Transaction[]
   user_id_filter: string
-  pagy: unknown
+  pagy: PagyProps
 }) {
   return (
-    <div className="max-w-5xl mx-auto p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="font-bold text-4xl text-dark-brown">
-          Koi Transactions
-          {user_id_filter && <span className="text-2xl font-normal"> — User #{user_id_filter}</span>}
-        </h1>
-        <Link
-          href={
-            user_id_filter ? `/admin/koi_transactions/new?user_id=${user_id_filter}` : '/admin/koi_transactions/new'
-          }
-          className="bg-brown border-2 border-dark-brown text-light-brown font-bold px-4 py-2 rounded-xs hover:opacity-80"
-        >
-          + Adjust Koi
-        </Link>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">Koi Transactions</h1>
+          {user_id_filter && (
+            <Badge variant="secondary" className="text-sm">
+              User #{user_id_filter}
+            </Badge>
+          )}
+        </div>
+        <Button asChild variant="outline">
+          <Link
+            href={
+              user_id_filter ? `/admin/koi_transactions/new?user_id=${user_id_filter}` : '/admin/koi_transactions/new'
+            }
+          >
+            + Adjust Koi
+          </Link>
+        </Button>
       </div>
 
-      <table className="w-full text-dark-brown text-sm">
-        <thead>
-          <tr className="border-b-2 border-dark-brown text-left">
-            <th className="pb-2 pr-4">User</th>
-            <th className="pb-2 pr-4">Amount</th>
-            <th className="pb-2 pr-4">Reason</th>
-            <th className="pb-2 pr-4">Description</th>
-            <th className="pb-2 pr-4">By</th>
-            <th className="pb-2">Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((txn) => (
-            <tr key={txn.id} className="border-b border-brown">
-              <td className="py-2 pr-4 font-bold">{txn.user.display_name}</td>
-              <td className={`py-2 pr-4 font-bold ${txn.amount > 0 ? 'text-green-700' : 'text-red-700'}`}>
-                {txn.amount > 0 ? `+${txn.amount}` : txn.amount} koi
-              </td>
-              <td className="py-2 pr-4">{txn.reason}</td>
-              <td className="py-2 pr-4">{txn.description}</td>
-              <td className="py-2 pr-4">{txn.actor.display_name}</td>
-              <td className="py-2">{txn.created_at}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {transactions.length === 0 && <p className="text-dark-brown mt-8 text-center">No transactions found.</p>}
+      <DataTable columns={columns} data={transactions} pagy={pagy} noun="transactions" />
     </div>
   )
 }
+
+AdminKoiTransactionsIndex.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>

@@ -19,7 +19,8 @@ class ShopOrdersController < ApplicationController
         frozen_price: @shop_order.frozen_price,
         quantity: @shop_order.quantity,
         created_at: @shop_order.created_at.strftime("%b %d, %Y")
-      }
+      },
+      just_purchased: flash[:just_purchased].present?
     }
   end
 
@@ -37,7 +38,7 @@ class ShopOrdersController < ApplicationController
   def create
     addresses = hca_formatted_addresses
     index = params[:address_index].to_i
-    address = addresses[index]
+    address = (index >= 0 && index < addresses.length) ? addresses[index] : nil # Reject negative/out-of-bounds indices
 
     unless address.present?
       return redirect_back fallback_location: new_shop_item_shop_order_path(@shop_item),
@@ -58,15 +59,16 @@ class ShopOrdersController < ApplicationController
 
     # Lock the user row to prevent concurrent orders from double-spending koi
     saved = current_user.with_lock do
+      @shop_item.reload # Re-read current price inside the lock
       balance = current_user.koi
-      max_quantity = [ (balance.to_f / @shop_item.price).floor, 1 ].max
-      quantity = quantity.clamp(1, max_quantity)
-      @shop_order.quantity = quantity
+      total_cost = @shop_item.price * quantity
 
-      if balance < @shop_item.price * quantity
+      if balance < total_cost
         @shop_order.errors.add(:base, "You don't have enough koi for this purchase")
         false
       else
+        @shop_order.frozen_price = @shop_item.price # Freeze the price read inside the lock
+        @shop_order.quantity = quantity
         @shop_order.save
       end
     end
@@ -77,7 +79,7 @@ class ShopOrdersController < ApplicationController
       rescue => e
         ErrorReporter.capture_exception(e, contexts: { airtable: { shop_order_id: @shop_order.id } })
       end
-      redirect_to shop_item_shop_order_path(@shop_item, @shop_order)
+      redirect_to shop_item_shop_order_path(@shop_item, @shop_order), flash: { just_purchased: true }
     else
       redirect_back fallback_location: new_shop_item_shop_order_path(@shop_item),
         inertia: { errors: @shop_order.errors.messages }
