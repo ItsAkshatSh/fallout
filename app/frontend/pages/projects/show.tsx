@@ -233,6 +233,17 @@ export default function ProjectsShow({
   ]
 
   function renderNewJournalEntryButton() {
+    if (can.create_journal_entry) {
+      return (
+        <ModalLink
+          href={`/projects/${project.id}/journal_entries/new`}
+          className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase text-sm hover:opacity-80"
+        >
+          New Journal Entry
+        </ModalLink>
+      )
+    }
+
     if (isTrial) {
       return (
         <button
@@ -245,16 +256,7 @@ export default function ProjectsShow({
       )
     }
 
-    if (!can.create_journal_entry) return null
-
-    return (
-      <ModalLink
-        href={`/projects/${project.id}/journal_entries/new`}
-        className="bg-brown text-light-brown border-2 border-dark-brown px-4 py-2 font-bold uppercase text-sm hover:opacity-80"
-      >
-        New Journal Entry
-      </ModalLink>
-    )
+    return null
   }
 
   const content = (
