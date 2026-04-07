@@ -17,7 +17,7 @@ class TimelapseActivityChecker
 
   def run
     video_file = download_video
-    raise "Failed to download video for #{@recordable.class.name} #{@recordable.id}" unless video_file
+    return empty_result unless video_file
 
     run_on_file(video_file)
   ensure

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import type { ReactNode } from 'react'
 import { Link, router } from '@inertiajs/react'
 import { useReviewHeartbeat } from '@/hooks/useReviewHeartbeat'
@@ -104,6 +104,85 @@ function WaitingLabel({ waitingSince, firstSubmittedAt }: { waitingSince: string
 }
 
 // --- Collapsible Card ---
+
+const JournalEntriesList = memo(function JournalEntriesList({
+  entries,
+}: {
+  entries: (RequirementsCheckJournalEntry & { isNew: boolean })[]
+}) {
+  return (
+    <div className="divide-y divide-border">
+      {entries.map((entry) => (
+        <div key={entry.id} className="p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <img src={entry.author_avatar} alt="" className="size-4 rounded-full" />
+            <span>{entry.author_display_name}</span>
+            <span>|</span>
+            <span>{entry.created_at}</span>
+            <span className="flex items-center gap-1">
+              <ClockIcon className="size-3" />
+              {formatDuration(entry.total_duration)}
+            </span>
+            {!entry.isNew && (
+              <Badge variant="outline" className="text-[10px]">
+                Older Ship
+              </Badge>
+            )}
+          </div>
+
+          {entry.recordings.length > 0 && (
+            <div className="grid grid-cols-3 gap-1.5">
+              {entry.recordings.map((rec) => (
+                <div key={rec.id} className="text-xs rounded border border-border p-2 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      className={`text-[10px] shrink-0 ${
+                        rec.type === 'LookoutTimelapse'
+                          ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+                          : rec.type === 'LapseTimelapse'
+                            ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800'
+                            : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+                      }`}
+                      variant="outline"
+                    >
+                      {rec.type === 'LookoutTimelapse'
+                        ? 'Lookout'
+                        : rec.type === 'LapseTimelapse'
+                          ? 'Lapse'
+                          : 'YouTube'}
+                    </Badge>
+                    <span className="text-muted-foreground">{formatDuration(rec.duration)}</span>
+                    {rec.removed_seconds > 0 && (
+                      <span className="text-red-600 dark:text-red-400">
+                        → {formatDuration(rec.duration - rec.removed_seconds)}
+                      </span>
+                    )}
+                  </div>
+                  {rec.description && <p className="text-muted-foreground leading-snug">{rec.description}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div
+            className="markdown-content max-w-none text-xs"
+            style={{ zoom: 0.85 }}
+            dangerouslySetInnerHTML={{ __html: entry.content_html }}
+          />
+          {entry.images.length > 0 && (
+            <div className="grid grid-cols-3 gap-2">
+              {entry.images.map((img, j) => (
+                <a key={j} href={img} target="_blank" rel="noopener noreferrer">
+                  <img src={img} alt="" className="rounded border border-border object-cover w-full max-h-24" />
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+})
 
 function CollapsibleCard({
   title,
@@ -685,83 +764,7 @@ export default function RequirementsChecksShow({
               }
               defaultOpen
             >
-              <div className="divide-y divide-border">
-                {allEntries.map((entry) => (
-                  <div key={entry.id} className="p-3 space-y-2">
-                    {/* Header */}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <img src={entry.author_avatar} alt="" className="size-4 rounded-full" />
-                      <span>{entry.author_display_name}</span>
-                      <span>|</span>
-                      <span>{entry.created_at}</span>
-                      <span className="flex items-center gap-1">
-                        <ClockIcon className="size-3" />
-                        {formatDuration(entry.total_duration)}
-                      </span>
-                      {!entry.isNew && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Older Ship
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Recordings grid */}
-                    {entry.recordings.length > 0 && (
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {entry.recordings.map((rec) => (
-                          <div key={rec.id} className="text-xs rounded border border-border p-2 space-y-1">
-                            <div className="flex items-center gap-1.5">
-                              <Badge
-                                className={`text-[10px] shrink-0 ${
-                                  rec.type === 'LookoutTimelapse'
-                                    ? 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
-                                    : rec.type === 'LapseTimelapse'
-                                      ? 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800'
-                                      : 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
-                                }`}
-                                variant="outline"
-                              >
-                                {rec.type === 'LookoutTimelapse'
-                                  ? 'Lookout'
-                                  : rec.type === 'LapseTimelapse'
-                                    ? 'Lapse'
-                                    : 'YouTube'}
-                              </Badge>
-                              <span className="text-muted-foreground">{formatDuration(rec.duration)}</span>
-                              {rec.removed_seconds > 0 && (
-                                <span className="text-red-600 dark:text-red-400">
-                                  → {formatDuration(rec.duration - rec.removed_seconds)}
-                                </span>
-                              )}
-                            </div>
-                            {rec.description && <p className="text-muted-foreground leading-snug">{rec.description}</p>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Journal content */}
-                    <div
-                      className="markdown-content max-w-none text-xs"
-                      style={{ zoom: 0.85 }}
-                      dangerouslySetInnerHTML={{ __html: entry.content_html }}
-                    />
-                    {entry.images.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {entry.images.map((img, j) => (
-                          <a key={j} href={img} target="_blank" rel="noopener noreferrer">
-                            <img
-                              src={img}
-                              alt=""
-                              className="rounded border border-border object-cover w-full max-h-24"
-                            />
-                          </a>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <JournalEntriesList entries={allEntries} />
             </CollapsibleCard>
           )}
         </div>

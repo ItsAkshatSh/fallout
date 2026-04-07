@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from 'react'
 import type { ReactNode } from 'react'
 import { Link, router } from '@inertiajs/react'
 import { useReviewHeartbeat } from '@/hooks/useReviewHeartbeat'
@@ -1062,7 +1062,7 @@ function RecordingBlock({
 
 // --- Collapsible Entry ---
 
-function EntrySection({
+const EntrySection = memo(function EntrySection({
   entry,
   index,
   isNew,
@@ -1221,7 +1221,20 @@ function EntrySection({
       )}
     </div>
   )
-}
+}, (prev, next) => {
+  if (prev.entry !== next.entry) return false
+  if (prev.index !== next.index) return false
+  if (prev.isNew !== next.isNew) return false
+  if (prev.isLast !== next.isLast) return false
+  if (prev.readOnly !== next.readOnly) return false
+  if (prev.savingRecording !== next.savingRecording) return false
+  const recIds = prev.entry.recordings.map((r) => String(r.id))
+  for (const recId of recIds) {
+    if (prev.annotations.recordings?.[recId] !== next.annotations.recordings?.[recId]) return false
+    if (prev.savedRecordings.has(recId) !== next.savedRecordings.has(recId)) return false
+  }
+  return true
+})
 
 // --- Main Page ---
 
