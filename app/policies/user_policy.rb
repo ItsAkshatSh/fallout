@@ -11,6 +11,10 @@ class UserPolicy < ApplicationPolicy
     admin? || record == user
   end
 
+  def update_roles?
+    admin?
+  end
+
   def destroy?
     admin? && record != user
   end

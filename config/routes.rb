@@ -155,7 +155,11 @@ Rails.application.routes.draw do
 
     namespace :admin do
       resources :projects, only: [ :index, :show ]
-      resources :users, only: [ :index, :show ]
+      resources :users, only: [ :index, :show ] do
+        member do
+          patch :update_roles
+        end
+      end
       resources :activity_checks, only: [ :new, :create ]
     end
   end

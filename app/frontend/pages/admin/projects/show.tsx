@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Link } from '@inertiajs/react'
+import { Deferred, Link } from '@inertiajs/react'
 import type { ColumnDef } from '@tanstack/react-table'
 import AdminLayout from '@/layouts/AdminLayout'
 import { Badge } from '@/components/admin/ui/badge'
@@ -7,6 +7,8 @@ import { Button } from '@/components/admin/ui/button'
 import { Card, CardContent } from '@/components/admin/ui/card'
 import { DataTable } from '@/components/admin/DataTable'
 import HoursDisplay from '@/components/admin/HoursDisplay'
+import AuditLog, { AuditLogLoading } from '@/components/admin/AuditLog'
+import type { AuditLogEntry } from '@/components/admin/AuditLog'
 import { ChevronLeftIcon, ExternalLinkIcon, ClockIcon } from 'lucide-react'
 import type { AdminProjectDetail, PagyProps, SiblingStatuses } from '@/types'
 
@@ -176,12 +178,14 @@ export default function AdminProjectsShow({
   pagy_ships,
   journal_entries,
   pagy_entries,
+  audit_log,
 }: {
   project: AdminProjectDetail
   ships: ShipRow[]
   pagy_ships: PagyProps
   journal_entries: JournalEntry[]
   pagy_entries: PagyProps
+  audit_log?: AuditLogEntry[]
 }) {
   return (
     <div>
@@ -414,6 +418,12 @@ export default function AdminProjectsShow({
       ) : (
         <p className="text-sm text-muted-foreground">No journal entries.</p>
       )}
+
+      <div className="mt-8">
+        <Deferred data="audit_log" fallback={<AuditLogLoading />}>
+          <AuditLog entries={audit_log!} />
+        </Deferred>
+      </div>
     </div>
   )
 }

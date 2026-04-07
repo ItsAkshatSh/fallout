@@ -1,18 +1,23 @@
+require "open3"
+
 class TimelapseActivityChecker
-  # Hamming distance threshold: frames with distance below this are considered identical.
-  # Accounts for JPEG compression artifacts across re-encoded frames.
-  SIMILARITY_THRESHOLD = 5
+  # blackframe filter: a difference frame is "inactive" when this % of pixels fall below the threshold.
+  BLACKFRAME_AMOUNT = 98
 
-  # dHash dimensions: 9 wide (to compute 8 horizontal gradients) x 8 tall = 64-bit hash
-  HASH_WIDTH = 9
-  HASH_HEIGHT = 8
+  # Pixel intensity (0-255) below which a pixel in the difference frame counts as "dark" (unchanged).
+  # Adjustable to account for compression noise across recording software.
+  BLACKFRAME_THRESHOLD = 25
 
-  # Extracted at 1fps of the compiled video. 1 frame = 1 video second ≈ 1 real minute.
-  # Only flag inactivity segments >= 2 real minutes (= 2 frames).
-  MIN_INACTIVE_DURATION = 2
+  # Frames per second to sample from the compiled timelapse.
+  SAMPLE_FPS = 1
 
-  def initialize(recordable)
+  # 1 timelapse second ≈ 1 real minute. Only flag inactivity segments >= 2 real minutes.
+  MIN_INACTIVE_SECONDS = 2
+
+  def initialize(recordable, blackframe_amount: BLACKFRAME_AMOUNT, blackframe_threshold: BLACKFRAME_THRESHOLD)
     @recordable = recordable
+    @blackframe_amount = blackframe_amount
+    @blackframe_threshold = blackframe_threshold
   end
 
   def run
@@ -25,19 +30,29 @@ class TimelapseActivityChecker
   end
 
   # Analyze a video file directly (for testing without a record).
-  def self.run_on_file(file)
-    new(nil).run_on_file(file)
+  def self.run_on_file(file, **opts)
+    new(nil, **opts).run_on_file(file)
   end
 
   def run_on_file(file)
-    frames_dir = extract_frames(file)
-    frame_paths = Dir.glob(File.join(frames_dir, "frame_*.jpg")).sort
-    return empty_result if frame_paths.size < 2
+    path = file.respond_to?(:path) ? file.path : file.to_s
+    output = run_ffmpeg_analysis(path)
+    return empty_result if output.nil?
 
-    hashes = frame_paths.map { |path| dhash(path) }
-    analyze_activity(hashes)
-  ensure
-    FileUtils.rm_rf(frames_dir) if frames_dir
+    total_pairs, inactive_indices = parse_ffmpeg_output(output)
+    return empty_result if total_pairs < 1
+
+    segments = collapse_into_segments(inactive_indices)
+      .select { |s| s[:duration_min] >= MIN_INACTIVE_SECONDS }
+
+    inactive_frame_count = segments.sum { |s| s[:duration_min] }
+
+    {
+      inactive_frames: inactive_frame_count,
+      total_frames: total_pairs + 1,
+      inactive_percentage: total_pairs > 0 ? (inactive_frame_count.to_f / total_pairs * 100).round(1) : 0.0,
+      segments: segments
+    }
   end
 
   private
@@ -60,10 +75,8 @@ class TimelapseActivityChecker
     tempfile = Tempfile.new([ "video_", ext ])
     tempfile.binmode
 
-    # Follow redirects with Net::HTTP
     uri = URI.parse(url)
     response = Net::HTTP.get_response(uri)
-    # Follow up to 3 redirects
     3.times do
       break unless response.is_a?(Net::HTTPRedirection)
       uri = URI.parse(response["location"])
@@ -84,72 +97,35 @@ class TimelapseActivityChecker
     nil
   end
 
-  def extract_frames(video_file)
-    dir = Dir.mktmpdir("timelapse_frames_")
+  # Single ffmpeg pass: sample at 1fps, convert to grayscale, compute consecutive frame
+  # differences via shift-and-subtract, then detect black (inactive) frames.
+  def run_ffmpeg_analysis(path)
+    filter = [
+      "[0:v]fps=#{SAMPLE_FPS},format=gray,split[a][b]",
+      "[a]trim=start_frame=1,setpts=PTS-STARTPTS[shifted]",
+      "[b][shifted]blend=all_mode=difference:eof_action=endall," \
+      "blackframe=amount=#{@blackframe_amount}:threshold=#{@blackframe_threshold}"
+    ].join(";")
 
-    # Extract at 1fps — each frame = 1 second of the compiled timelapse
-    vf = "fps=1"
-
-    path = video_file.respond_to?(:path) ? video_file.path : video_file.to_s
-
-    system(
+    output, status = Open3.capture2e(
       "ffmpeg", "-i", path,
-      "-vf", vf,
-      "-pix_fmt", "yuvj420p", # Ensure full-range YUV for MJPEG compatibility
-      "-q:v", "2",
-      File.join(dir, "frame_%04d.jpg"),
-      %i[out err] => File::NULL
+      "-filter_complex", filter,
+      "-f", "null", "-"
     )
 
-    # Don't raise — very short videos may produce 0 frames, which run_on_file handles
-    dir
+    status.success? ? output : nil
   end
 
-  def dhash(image_path)
-    image = MiniMagick::Image.open(image_path)
-    image.combine_options do |c|
-      c.resize "#{HASH_WIDTH}x#{HASH_HEIGHT}!"
-      c.colorspace "Gray"
-      c.depth 8
-    end
+  def parse_ffmpeg_output(output)
+    # blackframe reports only inactive (black) frames:
+    #   [Parsed_blackframe_0 @ 0x...] frame:5 pblack:100 pts:5 t:5.000000
+    inactive_indices = output.scan(/\[Parsed_blackframe.*?\]\s*frame:(\d+)\s+pblack:(\d+)/)
+      .map { |frame, _| frame.to_i }
 
-    pixels = image.get_pixels.flatten
-    hash = 0
+    # Total difference frames from ffmpeg progress output (frame= counter)
+    total_pairs = output.scan(/frame=\s*(\d+)/).flatten.map(&:to_i).max || 0
 
-    HASH_HEIGHT.times do |y|
-      (HASH_WIDTH - 1).times do |x|
-        left = pixels[y * HASH_WIDTH + x]
-        right = pixels[y * HASH_WIDTH + x + 1]
-        hash = (hash << 1) | (left < right ? 1 : 0)
-      end
-    end
-
-    hash
-  end
-
-  def hamming_distance(hash_a, hash_b)
-    (hash_a ^ hash_b).to_s(2).count("1")
-  end
-
-  def analyze_activity(hashes)
-    total_frames = hashes.size
-    inactive_pairs = []
-
-    hashes.each_cons(2).with_index do |(a, b), i|
-      inactive_pairs << i if hamming_distance(a, b) < SIMILARITY_THRESHOLD
-    end
-
-    segments = collapse_into_segments(inactive_pairs)
-      .select { |s| s[:duration_min] >= MIN_INACTIVE_DURATION }
-
-    inactive_frame_count = segments.sum { |s| s[:duration_min] }
-
-    {
-      inactive_frames: inactive_frame_count,
-      total_frames: total_frames,
-      inactive_percentage: total_frames > 1 ? (inactive_frame_count.to_f / (total_frames - 1) * 100).round(1) : 0.0,
-      segments: segments
-    }
+    [ total_pairs, inactive_indices ]
   end
 
   def collapse_into_segments(inactive_indices)

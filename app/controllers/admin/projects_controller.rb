@@ -47,7 +47,8 @@ class Admin::ProjectsController < Admin::ApplicationController
       ships: @ships.map { |s| serialize_ship_row(s) },
       pagy_ships: pagy_props(@pagy_ships),
       journal_entries: @entries.map { |je| serialize_journal_entry(je, @ta_annotations) },
-      pagy_entries: pagy_props(@pagy_entries)
+      pagy_entries: pagy_props(@pagy_entries),
+      audit_log: InertiaRails.defer { serialize_audit_log(@project) }
     }
   end
 

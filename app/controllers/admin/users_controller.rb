@@ -27,8 +27,10 @@ class Admin::UsersController < Admin::ApplicationController
 
     render inertia: {
       user: serialize_user_detail(@user),
+      valid_roles: User::VALID_ROLES,
+      is_self: @user == current_user,
       project_data: InertiaRails.defer {
-        base_scope = @user.projects.includes(:user)
+        base_scope = @user.projects
         base_scope = base_scope.kept unless params[:include_deleted] == "1"
         base_scope = base_scope.where(is_unlisted: false) if params[:hide_unlisted] == "1"
         base_scope = base_scope.where("EXISTS (SELECT 1 FROM journal_entries WHERE journal_entries.project_id = projects.id AND journal_entries.discarded_at IS NULL)") if params[:with_journals] == "1"
@@ -46,11 +48,31 @@ class Admin::UsersController < Admin::ApplicationController
           total_count: base_scope.count
         }
       },
+      audit_log: InertiaRails.defer { serialize_audit_log(@user) },
       query: params[:query].to_s,
       include_deleted: params[:include_deleted] == "1",
       hide_unlisted: params[:hide_unlisted] == "1",
       with_journals: params[:with_journals] == "1"
     }
+  end
+
+  def update_roles
+    @user = User.find(params[:id])
+    authorize @user
+
+    roles = Array(params[:roles]).map(&:to_s) & User::VALID_ROLES
+    # Preserve the user role — it's not editable through this endpoint
+    roles |= [ "user" ] if @user.has_role?(:user)
+    roles -= [ "user" ] unless @user.has_role?(:user)
+
+    # Admins cannot remove the admin role from themselves
+    if @user == current_user && @user.admin? && roles.exclude?("admin")
+      redirect_to admin_user_path(@user), alert: "You cannot remove the admin role from yourself."
+      return
+    end
+
+    @user.update!(roles: roles)
+    redirect_to admin_user_path(@user), notice: "Roles updated."
   end
 
   private
@@ -90,7 +112,7 @@ class Admin::UsersController < Admin::ApplicationController
       id: project.id,
       name: project.name,
       user_id: project.user_id,
-      user_display_name: project.user.display_name,
+      user_display_name: @user.display_name,
       journal_entries_count: @entry_counts[project.id] || 0,
       repo_link: project.repo_link,
       hours_tracked: ((@hours_tracked[project.id] || 0) / 3600.0).round(1),

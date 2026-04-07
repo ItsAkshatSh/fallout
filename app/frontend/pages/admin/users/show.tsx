@@ -15,7 +15,20 @@ import {
 } from '@/components/admin/ui/dropdown-menu'
 import { DataTable } from '@/components/admin/DataTable'
 import { Skeleton } from '@/components/admin/ui/skeleton'
-import { ChevronLeftIcon, ExternalLinkIcon, SearchIcon, SlidersHorizontalIcon } from 'lucide-react'
+import { ChevronLeftIcon, ExternalLinkIcon, SearchIcon, ShieldIcon, SlidersHorizontalIcon } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/admin/ui/alert-dialog'
+import AuditLog, { AuditLogLoading } from '@/components/admin/AuditLog'
+import type { AuditLogEntry } from '@/components/admin/AuditLog'
 import type { AdminUserDetail, AdminProjectRow, AdminProjectData, PagyProps } from '@/types'
 
 const projectColumns: ColumnDef<AdminProjectRow>[] = [
@@ -85,7 +98,10 @@ const projectColumns: ColumnDef<AdminProjectRow>[] = [
 
 interface PageProps {
   user: AdminUserDetail
+  valid_roles: string[]
+  is_self: boolean
   project_data?: AdminProjectData
+  audit_log?: AuditLogEntry[]
   query: string
   include_deleted: boolean
   hide_unlisted: boolean
@@ -98,6 +114,98 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-sm mt-0.5">{children}</dd>
     </div>
+  )
+}
+
+function RolesEditor({ user, validRoles, isSelf }: { user: AdminUserDetail; validRoles: string[]; isSelf: boolean }) {
+  const editableRoles = validRoles.filter((r) => r !== 'user')
+  const [selectedRoles, setSelectedRoles] = useState<string[]>(user.roles.filter((r) => r !== 'user'))
+  const [processing, setProcessing] = useState(false)
+  const currentEditable = user.roles.filter((r) => r !== 'user')
+  const hasChanges = JSON.stringify([...selectedRoles].sort()) !== JSON.stringify([...currentEditable].sort())
+
+  function toggleRole(role: string) {
+    setSelectedRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
+  }
+
+  function isDisabled(role: string) {
+    // Admins cannot remove admin from themselves
+    if (isSelf && role === 'admin' && user.roles.includes('admin')) return true
+    return false
+  }
+
+  function saveRoles() {
+    setProcessing(true)
+    // Always preserve the user role if the user currently has it
+    const roles = user.roles.includes('user') ? ['user', ...selectedRoles] : selectedRoles
+    router.patch(
+      `/admin/users/${user.id}/update_roles`,
+      { roles },
+      {
+        preserveState: true,
+        onFinish: () => setProcessing(false),
+      },
+    )
+  }
+
+  return (
+    <Card>
+      <CardContent>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium mb-2">Manage Roles</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              {editableRoles.map((role) => {
+                const active = selectedRoles.includes(role)
+                const disabled = isDisabled(role)
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggleRole(role)}
+                    className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      active
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-transparent text-muted-foreground border-border hover:border-foreground/50'
+                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                  >
+                    {role}
+                  </button>
+                )
+              })}
+            </div>
+            {isSelf && user.roles.includes('admin') && (
+              <p className="text-xs text-muted-foreground mt-2">You cannot remove the admin role from yourself.</p>
+            )}
+          </div>
+          {hasChanges && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" disabled={processing}>
+                  Save Roles
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Update roles for {user.display_name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Roles will be set to:{' '}
+                    {[...(user.roles.includes('user') ? ['user'] : []), ...selectedRoles].join(', ') || '(none)'}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={saveRoles} disabled={processing}>
+                    Confirm
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -232,7 +340,10 @@ function ProjectsSection({
 
 export default function AdminUsersShow({
   user,
+  valid_roles,
+  is_self,
   project_data,
+  audit_log,
   query,
   include_deleted,
   hide_unlisted,
@@ -299,6 +410,10 @@ export default function AdminUsersShow({
         </CardContent>
       </Card>
 
+      <div className="mb-6">
+        <RolesEditor user={user} validRoles={valid_roles} isSelf={is_self} />
+      </div>
+
       <Deferred data="project_data" fallback={<ProjectsLoading />}>
         <ProjectsSection
           project_data={project_data!}
@@ -309,6 +424,12 @@ export default function AdminUsersShow({
           with_journals={with_journals}
         />
       </Deferred>
+
+      <div className="mt-8">
+        <Deferred data="audit_log" fallback={<AuditLogLoading />}>
+          <AuditLog entries={audit_log!} />
+        </Deferred>
+      </div>
     </div>
   )
 }

@@ -5,6 +5,7 @@ class ApplicationController < ActionController::Base
   include Pagy::Method
   include InertiaPagination
 
+  before_action :set_paper_trail_whodunnit # Track who made changes in PaperTrail audit log
   after_action :track_page_view
 
   after_action :verify_authorized, except: :index

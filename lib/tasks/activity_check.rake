@@ -3,12 +3,21 @@
 namespace :activity_check do
   desc "Enqueue TimelapseActivityCheckJob for all recordings not yet checked"
   task backfill: :environment do
-    [LookoutTimelapse, LapseTimelapse, YouTubeVideo].each do |klass|
-      unchecked = klass.where(activity_checked_at: nil)
-      count = unchecked.count
-      puts "#{klass.name}: #{count} unchecked"
+    enqueue_jobs(scope: ->(klass) { klass.where(activity_checked_at: nil) })
+  end
 
-      unchecked.find_each do |record|
+  desc "Re-run TimelapseActivityCheckJob for ALL recordings (including previously checked)"
+  task rerun_all: :environment do
+    enqueue_jobs(scope: ->(klass) { klass.all })
+  end
+
+  def enqueue_jobs(scope:)
+    [LookoutTimelapse, LapseTimelapse, YouTubeVideo].each do |klass|
+      records = scope.call(klass)
+      count = records.count
+      puts "#{klass.name}: #{count} to process"
+
+      records.find_each do |record|
         TimelapseActivityCheckJob.perform_later(record)
       end
 

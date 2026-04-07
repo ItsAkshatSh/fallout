@@ -262,11 +262,6 @@ function ReviewTopBar({
 
 // --- Timeline Utilities ---
 
-// Activity checker extracts at 1fps: each frame index = 1 second of the compiled timelapse
-function inactiveFrameToSeconds(frameIndex: number): number {
-  return frameIndex
-}
-
 function computeSnapPoints(recording: ReviewRecording, segments: TimeAuditSegment[], totalDuration?: number): number[] {
   const points = new Set<number>([0, totalDuration ?? recording.duration])
   for (const seg of segments) {
@@ -275,8 +270,8 @@ function computeSnapPoints(recording: ReviewRecording, segments: TimeAuditSegmen
   }
   if (recording.activity_checked && recording.inactive_segments) {
     for (const seg of recording.inactive_segments) {
-      points.add(inactiveFrameToSeconds(seg.start_min))
-      points.add(inactiveFrameToSeconds(seg.start_min + seg.duration_min))
+      points.add(seg.start_min)
+      points.add(seg.start_min + seg.duration_min)
     }
   }
   return [...points].sort((a, b) => a - b)
@@ -427,8 +422,8 @@ function AnnotationTimeline({
         <div className={`relative h-1.5 overflow-hidden mt-px ${checked ? 'bg-emerald-500/30' : 'bg-muted'}`}>
           {hasInactiveData &&
             recording.inactive_segments?.map((seg, i) => {
-              const startSec = inactiveFrameToSeconds(seg.start_min)
-              const durSec = inactiveFrameToSeconds(seg.duration_min)
+              const startSec = seg.start_min
+              const durSec = seg.duration_min
               const startPct = (startSec / totalDuration) * 100
               const widthPct = (durSec / totalDuration) * 100
               return (
@@ -1062,179 +1057,182 @@ function RecordingBlock({
 
 // --- Collapsible Entry ---
 
-const EntrySection = memo(function EntrySection({
-  entry,
-  index,
-  isNew,
-  isLast,
-  annotations,
-  savedRecordings,
-  readOnly,
-  onDescriptionChange,
-  onSegmentAdd,
-  onSegmentRemove,
-  onSave,
-  savingRecording,
-}: {
-  entry: ReviewJournalEntry
-  index: number
-  isNew: boolean
-  isLast: boolean
-  annotations: TimeAuditAnnotations
-  savedRecordings: Set<string>
-  readOnly?: boolean
-  onDescriptionChange: (recordingId: number, description: string) => void
-  onSegmentAdd: (recordingId: number, seg: TimeAuditSegment) => void
-  onSegmentRemove: (recordingId: number, index: number) => void
-  onSave: (recordingId: number) => void
-  savingRecording: number | null
-}) {
-  const allSaved =
-    isNew &&
-    entry.recordings.length > 0 &&
-    entry.recordings.every((r) => {
-      const recId = String(r.id)
-      return savedRecordings.has(recId) && (annotations.recordings?.[recId]?.description?.trim() ?? '').length > 0
-    })
+const EntrySection = memo(
+  function EntrySection({
+    entry,
+    index,
+    isNew,
+    isLast,
+    annotations,
+    savedRecordings,
+    readOnly,
+    onDescriptionChange,
+    onSegmentAdd,
+    onSegmentRemove,
+    onSave,
+    savingRecording,
+  }: {
+    entry: ReviewJournalEntry
+    index: number
+    isNew: boolean
+    isLast: boolean
+    annotations: TimeAuditAnnotations
+    savedRecordings: Set<string>
+    readOnly?: boolean
+    onDescriptionChange: (recordingId: number, description: string) => void
+    onSegmentAdd: (recordingId: number, seg: TimeAuditSegment) => void
+    onSegmentRemove: (recordingId: number, index: number) => void
+    onSave: (recordingId: number) => void
+    savingRecording: number | null
+  }) {
+    const allSaved =
+      isNew &&
+      entry.recordings.length > 0 &&
+      entry.recordings.every((r) => {
+        const recId = String(r.id)
+        return savedRecordings.has(recId) && (annotations.recordings?.[recId]?.description?.trim() ?? '').length > 0
+      })
 
-  const entryApprovedSeconds = useMemo(() => {
-    let total = entry.total_duration
-    for (const rec of entry.recordings) {
-      const recData = annotations.recordings?.[String(rec.id)]
-      if (!recData?.segments) continue
-      const multiplier = 60
-      for (const seg of recData.segments) {
-        const videoRange = seg.end_seconds - seg.start_seconds
-        const realRange = videoRange * multiplier
-        if (seg.type === 'removed') {
-          total -= realRange
-        } else if (seg.type === 'deflated') {
-          total -= (realRange * (seg.deflated_percent ?? 0)) / 100
+    const entryApprovedSeconds = useMemo(() => {
+      let total = entry.total_duration
+      for (const rec of entry.recordings) {
+        const recData = annotations.recordings?.[String(rec.id)]
+        if (!recData?.segments) continue
+        const multiplier = 60
+        for (const seg of recData.segments) {
+          const videoRange = seg.end_seconds - seg.start_seconds
+          const realRange = videoRange * multiplier
+          if (seg.type === 'removed') {
+            total -= realRange
+          } else if (seg.type === 'deflated') {
+            total -= (realRange * (seg.deflated_percent ?? 0)) / 100
+          }
         }
       }
-    }
-    return Math.max(0, Math.round(total))
-  }, [entry, annotations])
+      return Math.max(0, Math.round(total))
+    }, [entry, annotations])
 
-  const hasDeductions = entryApprovedSeconds !== entry.total_duration
+    const hasDeductions = entryApprovedSeconds !== entry.total_duration
 
-  const [expanded, setExpanded] = useState(isNew)
+    const [expanded, setExpanded] = useState(isNew)
 
-  const prevAllSaved = useRef(false)
-  useEffect(() => {
-    if (allSaved && !prevAllSaved.current && !isLast) {
-      setExpanded(false)
-    }
-    prevAllSaved.current = allSaved
-  }, [allSaved, isLast])
+    const prevAllSaved = useRef(false)
+    useEffect(() => {
+      if (allSaved && !prevAllSaved.current && !isLast) {
+        setExpanded(false)
+      }
+      prevAllSaved.current = allSaved
+    }, [allSaved, isLast])
 
-  return (
-    <div className="flex flex-col snap-start" style={expanded ? { height: 'calc(100vh - 45px)' } : undefined}>
-      {/* Entry header */}
-      <button
-        onClick={() => setExpanded((e) => !e)}
-        className="bg-muted/50 border-b border-border px-4 py-2 flex items-center gap-2 shrink-0 cursor-pointer hover:bg-muted/80 transition-colors text-left w-full"
-      >
-        {expanded ? (
-          <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-        )}
-        <img src={entry.author_avatar} alt="" className="size-5 rounded-full" />
-        <span className="font-semibold text-sm">Entry {index + 1}</span>
-        <span className="text-xs text-muted-foreground">{entry.created_at}</span>
-        <span className="text-xs text-muted-foreground flex items-center gap-1">
-          <ClockIcon className="size-3" />
-          {hasDeductions ? (
-            <>
-              {formatDuration(entryApprovedSeconds)} / {formatDuration(entry.total_duration)}
-            </>
+    return (
+      <div className="flex flex-col snap-start" style={expanded ? { height: 'calc(100vh - 45px)' } : undefined}>
+        {/* Entry header */}
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="bg-muted/50 border-b border-border px-4 py-2 flex items-center gap-2 shrink-0 cursor-pointer hover:bg-muted/80 transition-colors text-left w-full"
+        >
+          {expanded ? (
+            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
           ) : (
-            formatDuration(entry.total_duration)
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
           )}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          · {entry.recordings.length} recording{entry.recordings.length !== 1 ? 's' : ''}
-        </span>
-        {!isNew && (
-          <Badge variant="outline" className="text-xs">
-            <CheckIcon className="size-3 mr-0.5" />
-            Older Ship
-          </Badge>
-        )}
-        {allSaved && (
-          <Badge variant="default" className="text-xs">
-            <CheckIcon className="size-3 mr-0.5" />
-            Done
-          </Badge>
-        )}
-      </button>
-
-      {/* Body */}
-      {expanded && (
-        <div className="flex flex-1 min-h-0">
-          {/* Left — videos */}
-          <div className="w-1/2 overflow-y-auto p-4 space-y-6">
-            {entry.recordings.map((rec) => {
-              const recId = String(rec.id)
-              const recAnnotation = annotations.recordings?.[recId]
-              return (
-                <RecordingBlock
-                  key={rec.id}
-                  recording={rec}
-                  description={recAnnotation?.description ?? ''}
-                  segments={recAnnotation?.segments ?? []}
-                  saved={savedRecordings.has(recId)}
-                  readOnly={readOnly}
-                  onDescriptionChange={(d) => onDescriptionChange(rec.id, d)}
-                  onSegmentAdd={(seg) => onSegmentAdd(rec.id, seg)}
-                  onSegmentRemove={(i) => onSegmentRemove(rec.id, i)}
-                  onSave={() => onSave(rec.id)}
-                  saving={savingRecording === rec.id}
-                />
-              )
-            })}
-            {entry.recordings.length === 0 && <div className="text-sm text-muted-foreground">No recordings</div>}
-          </div>
-
-          {/* Center divider — 5px scrollable gutter */}
-          <div className="w-1.5 shrink-0 bg-border" />
-
-          {/* Right — journal */}
-          <div className="w-1/2 overflow-y-auto p-4 text-xs">
-            <div
-              className="markdown-content max-w-none"
-              style={{ zoom: 0.75 }}
-              dangerouslySetInnerHTML={{ __html: entry.content_html }}
-            />
-            {entry.images.length > 0 && (
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                {entry.images.map((img, j) => (
-                  <a key={j} href={img} target="_blank" rel="noopener noreferrer">
-                    <img src={img} alt="" className="rounded border border-border object-cover w-full max-h-32" />
-                  </a>
-                ))}
-              </div>
+          <img src={entry.author_avatar} alt="" className="size-5 rounded-full" />
+          <span className="font-semibold text-sm">Entry {index + 1}</span>
+          <span className="text-xs text-muted-foreground">{entry.created_at}</span>
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <ClockIcon className="size-3" />
+            {hasDeductions ? (
+              <>
+                {formatDuration(entryApprovedSeconds)} / {formatDuration(entry.total_duration)}
+              </>
+            ) : (
+              formatDuration(entry.total_duration)
             )}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            · {entry.recordings.length} recording{entry.recordings.length !== 1 ? 's' : ''}
+          </span>
+          {!isNew && (
+            <Badge variant="outline" className="text-xs">
+              <CheckIcon className="size-3 mr-0.5" />
+              Older Ship
+            </Badge>
+          )}
+          {allSaved && (
+            <Badge variant="default" className="text-xs">
+              <CheckIcon className="size-3 mr-0.5" />
+              Done
+            </Badge>
+          )}
+        </button>
+
+        {/* Body */}
+        {expanded && (
+          <div className="flex flex-1 min-h-0">
+            {/* Left — videos */}
+            <div className="w-1/2 overflow-y-auto p-4 space-y-6">
+              {entry.recordings.map((rec) => {
+                const recId = String(rec.id)
+                const recAnnotation = annotations.recordings?.[recId]
+                return (
+                  <RecordingBlock
+                    key={rec.id}
+                    recording={rec}
+                    description={recAnnotation?.description ?? ''}
+                    segments={recAnnotation?.segments ?? []}
+                    saved={savedRecordings.has(recId)}
+                    readOnly={readOnly}
+                    onDescriptionChange={(d) => onDescriptionChange(rec.id, d)}
+                    onSegmentAdd={(seg) => onSegmentAdd(rec.id, seg)}
+                    onSegmentRemove={(i) => onSegmentRemove(rec.id, i)}
+                    onSave={() => onSave(rec.id)}
+                    saving={savingRecording === rec.id}
+                  />
+                )
+              })}
+              {entry.recordings.length === 0 && <div className="text-sm text-muted-foreground">No recordings</div>}
+            </div>
+
+            {/* Center divider — 5px scrollable gutter */}
+            <div className="w-1.5 shrink-0 bg-border" />
+
+            {/* Right — journal */}
+            <div className="w-1/2 overflow-y-auto p-4 text-xs">
+              <div
+                className="markdown-content max-w-none"
+                style={{ zoom: 0.75 }}
+                dangerouslySetInnerHTML={{ __html: entry.content_html }}
+              />
+              {entry.images.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {entry.images.map((img, j) => (
+                    <a key={j} href={img} target="_blank" rel="noopener noreferrer">
+                      <img src={img} alt="" className="rounded border border-border object-cover w-full max-h-32" />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
-}, (prev, next) => {
-  if (prev.entry !== next.entry) return false
-  if (prev.index !== next.index) return false
-  if (prev.isNew !== next.isNew) return false
-  if (prev.isLast !== next.isLast) return false
-  if (prev.readOnly !== next.readOnly) return false
-  if (prev.savingRecording !== next.savingRecording) return false
-  const recIds = prev.entry.recordings.map((r) => String(r.id))
-  for (const recId of recIds) {
-    if (prev.annotations.recordings?.[recId] !== next.annotations.recordings?.[recId]) return false
-    if (prev.savedRecordings.has(recId) !== next.savedRecordings.has(recId)) return false
-  }
-  return true
-})
+        )}
+      </div>
+    )
+  },
+  (prev, next) => {
+    if (prev.entry !== next.entry) return false
+    if (prev.index !== next.index) return false
+    if (prev.isNew !== next.isNew) return false
+    if (prev.isLast !== next.isLast) return false
+    if (prev.readOnly !== next.readOnly) return false
+    if (prev.savingRecording !== next.savingRecording) return false
+    const recIds = prev.entry.recordings.map((r) => String(r.id))
+    for (const recId of recIds) {
+      if (prev.annotations.recordings?.[recId] !== next.annotations.recordings?.[recId]) return false
+      if (prev.savedRecordings.has(recId) !== next.savedRecordings.has(recId)) return false
+    }
+    return true
+  },
+)
 
 // --- Main Page ---
 

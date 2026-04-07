@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_07_011926) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_07_174922) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -582,8 +582,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_07_011926) do
     t.bigint "item_id", null: false
     t.string "item_type", null: false
     t.text "object"
+    t.jsonb "object_changes"
     t.string "whodunnit"
     t.index ["item_type", "item_id"], name: "index_versions_on_item_type_and_item_id"
+    t.index ["object_changes"], name: "index_versions_on_object_changes", using: :gin
   end
 
   create_table "you_tube_videos", force: :cascade do |t|
