@@ -12,7 +12,7 @@ namespace :activity_check do
   end
 
   def enqueue_jobs(scope:)
-    [LookoutTimelapse, LapseTimelapse, YouTubeVideo].each do |klass|
+    [ LookoutTimelapse, LapseTimelapse, YouTubeVideo ].each do |klass|
       records = scope.call(klass)
       count = records.count
       puts "#{klass.name}: #{count} to process"

@@ -1,194 +1,318 @@
 import { type ReactNode, useState, useRef, useEffect } from 'react'
 import { router } from '@inertiajs/react'
 import { Modal } from '@inertiaui/modal-react'
+import NavigationButtons from '@/components/onboarding/NavigationButtons'
 import Frame from '@/components/shared/Frame'
-import Button from '@/components/shared/Button'
 import Input from '@/components/shared/Input'
 import TextArea from '@/components/shared/TextArea'
+import ProgressBar from '@/components/shared/ProgressBar'
 import SpeechBubble from '@/components/onboarding/SpeechBubble'
 import { Pagination, PaginationPage } from '@/components/shared/Pagination'
+import useDialogue from '@/hooks/useDialogue'
+import { playUrl } from '@/lib/dialogueAudio'
+import { clearPathEntryTransition, rememberPathEntryTransition } from '@/lib/pathTransition'
+
+const contentPhaseForwardTransitionMs = 320
+const pathTransitionMs = 950
+const sceneTransitionEase = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+type PendingProjectSubmission = {
+  name: string
+  description: string
+}
 
 function ProjectsOnboarding({ is_modal }: { is_modal: boolean }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [finalizingSubmit, setFinalizingSubmit] = useState(false)
+  const [finalStepSubmitted, setFinalStepSubmitted] = useState(false)
+  const [pathTransitionStarted, setPathTransitionStarted] = useState(false)
+  const [submitAttemptKey, setSubmitAttemptKey] = useState(0)
+  const [firstDialogueReady, setFirstDialogueReady] = useState(false)
+  const [spinOverlay, setSpinOverlay] = useState(false)
+  const [spinOverlayOut, setSpinOverlayOut] = useState(false)
   const modalRef = useRef<{ close: () => void }>(null)
+  const pendingSubmissionRef = useRef<PendingProjectSubmission | null>(null)
+  const pathTransitionDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function resetFinalSubmitState() {
+    setFinalizingSubmit(false)
+    setFinalStepSubmitted(false)
+    setPathTransitionStarted(false)
+    pendingSubmissionRef.current = null
+    if (pathTransitionDelayRef.current) {
+      clearTimeout(pathTransitionDelayRef.current)
+      pathTransitionDelayRef.current = null
+    }
+  }
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (processing) return
+    if (processing || finalizingSubmit || !name.trim() || !description.trim()) return
+    pendingSubmissionRef.current = { name, description }
+    setSubmitAttemptKey((current) => current + 1)
+    setFinalizingSubmit(true)
+    setFinalStepSubmitted(true)
+  }
+
+  function submitProject(data: PendingProjectSubmission) {
     setProcessing(true)
-    const data: Record<string, string> = { name, description }
-    data.return_to = is_modal ? 'path' : 'path_projects'
-    router.post('/projects', data, {
-      onFinish: () => setProcessing(false),
-      onSuccess: () => modalRef.current?.close(),
-    })
+    let requestSucceeded = false
+
+    router.post(
+      '/projects',
+      {
+        project: {
+          name: data.name,
+          description: data.description,
+          repo_link: '',
+        },
+        return_to: is_modal ? 'path' : 'path_projects',
+      },
+      {
+        onSuccess: () => {
+          requestSucceeded = true
+          modalRef.current?.close()
+        },
+        onFinish: () => {
+          setProcessing(false)
+
+          if (!requestSucceeded && window.location.pathname.startsWith('/projects/onboarding')) {
+            clearPathEntryTransition()
+            resetFinalSubmitState()
+          }
+        },
+      },
+    )
+  }
+
+  function handleFinalProgressComplete() {
+    const pendingSubmission = pendingSubmissionRef.current
+    if (!finalStepSubmitted || pathTransitionStarted || !pendingSubmission) return
+
+    setPathTransitionStarted(true)
+
+    const doSubmit = () =>
+      submitProject({
+        name: pendingSubmission.name,
+        description: pendingSubmission.description,
+      })
+
+    if (!is_modal) {
+      rememberPathEntryTransition('onboarding-complete', {
+        introMode: 'onboarding',
+        pendingModal: 'projects',
+        readDocsNudge: true,
+      })
+
+      pathTransitionDelayRef.current = setTimeout(() => {
+        pathTransitionDelayRef.current = null
+        doSubmit()
+      }, pathTransitionMs)
+    } else {
+      doSubmit()
+    }
   }
 
   const content = (
-    <form onSubmit={submit} className="w-full h-full mx-auto p-8">
-      <Pagination className="flex flex-col h-full">
-        <PaginationPage>{({ next }) => <SpinPhase onComplete={next} />}</PaginationPage>
+    <>
+      {/* Sky-blue overlay that appears instantly when spin video ends — matches DialogueScene bg, preventing any flash */}
+      {spinOverlay && (
+        <div
+          className="fixed inset-0 z-[60] bg-light-blue pointer-events-none transition-opacity duration-1000"
+          style={{ opacity: spinOverlayOut ? 0 : 1 }}
+          onTransitionEnd={() => setSpinOverlay(false)}
+        />
+      )}
+      <form onSubmit={submit} className="w-full h-full mx-auto p-8">
+        <Pagination className="flex flex-col h-full">
+          <PaginationPage>
+            {({ next }) => (
+              <SpinPhase
+                onComplete={() => {
+                  setSpinOverlay(true) // instantly cover the flash with dark overlay
+                  next()
+                  requestAnimationFrame(() => requestAnimationFrame(() => setSpinOverlayOut(true)))
+                }}
+                onReliefDone={() => setFirstDialogueReady(true)}
+              />
+            )}
+          </PaginationPage>
 
-        <PaginationPage>
-          {({ next }) => <DialogueScene prompt="Oh. It's you again?" onContinue={next} />}
-        </PaginationPage>
+          <PaginationPage>
+            {({ next }) => (
+              <DialogueScene prompt="Oh. It's you again?" onContinue={next} dialogueEnabled={firstDialogueReady} />
+            )}
+          </PaginationPage>
 
-        <PaginationPage>
-          {({ next, prev }) => (
-            <DialogueScene prompt="I was woken up from my nap to help you start" onContinue={next} onBack={prev} />
-          )}
-        </PaginationPage>
+          <PaginationPage>
+            {({ next, prev }) => (
+              <DialogueScene prompt="I was woken up from my nap to help you start" onContinue={next} onBack={prev} />
+            )}
+          </PaginationPage>
 
-        <PaginationPage>{({ next, prev }) => <DialogueScene angry onContinue={next} onBack={prev} />}</PaginationPage>
+          <PaginationPage>{({ next, prev }) => <DialogueScene angry onContinue={next} onBack={prev} />}</PaginationPage>
 
-        <PaginationPage>
-          {({ next, prev, currentPage, totalPages }) => (
-            <ContentPhase currentPage={currentPage} totalPages={totalPages} onContinue={next} onBack={prev}>
-              <div className="flex flex-col w-full max-w-4xl mx-auto h-full">
-                <div className="flex items-start gap-3 mb-4">
-                  <img src="/onboarding/chinese_heidi.webp" className="w-42 lg:w-56 h-auto" />
+          <PaginationPage>
+            {({ next, prev, currentPage, totalPages }) => (
+              <ContentPhase currentPage={currentPage} totalPages={totalPages} onContinue={next} onBack={prev}>
+                <div className="flex flex-col w-full max-w-4xl mx-auto">
+                  <div className="mb-4 flex flex-wrap items-start gap-3 sm:gap-4">
+                    <img src="/onboarding/chinese_heidi.webp" className="h-auto w-28 shrink-0 sm:w-36 lg:w-56" />
 
-                  <div className="h-full pt-8">
-                    <SpeechBubble dir="left">
-                      watch this!! a 3 min overview of the ENTIRE program -- you'll regret not watching it
-                    </SpeechBubble>
-                  </div>
-                </div>
-
-                <div className="flex-1 flex items-center justify-center pb-12">
-                  <div className="w-full border-2 border-dark-brown rounded-2xl overflow-hidden bg-white aspect-video">
-                    <video src="/intro.mp4" className="w-full h-full object-contain" autoPlay controls playsInline />
-                  </div>
-                </div>
-              </div>
-            </ContentPhase>
-          )}
-        </PaginationPage>
-
-        <PaginationPage>
-          {({ next, prev, currentPage, totalPages }) => (
-            <ContentPhase
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onContinue={next}
-              continueDisabled={!description.trim()}
-              onBack={prev}
-            >
-              <div className="flex flex-col gap-6 lg:gap-8 w-full max-w-4xl mx-auto my-auto">
-                <div className="relative mt-8 lg:mt-12">
-                  <div className="mb-8 pb-2 flex flex-col gap-8 md:pb-0 md:mb-6 md:flex-row md:items-start md:justify-between md:gap-4">
-                    <h2 className="font-outfit text-3xl lg:text-5xl font-bold lg:pr-96">START YOUR FIRST PROJECT!</h2>
-                    <PosterCollage className="pointer-events-none relative z-10 w-56 aspect-video shrink-0 mx-auto md:mx-0 lg:hidden" />
+                    <div className="min-w-0 flex-1 basis-64 pt-1 sm:pt-6 lg:pt-8">
+                      <SpeechBubble dir="left" style={{ maxWidth: 'min(32rem, calc(100vw - 2rem))' }}>
+                        <span className="block whitespace-normal">
+                          watch this!! a 3 min overview of the ENTIRE program -- you'll regret not watching it
+                        </span>
+                      </SpeechBubble>
+                    </div>
                   </div>
 
-                  <div className="relative">
-                    <PosterCollage className="pointer-events-none absolute right-0 -top-24 -right-8 z-10 hidden lg:block w-80 aspect-video" />
-
-                    <div className="border-2 border-dark-brown rounded-2xl bg-white p-6 lg:p-8 pr-6 lg:pr-72 text-base lg:text-xl">
-                      <p className="mb-4">Build as many hardware projects as you want!</p>
-                      <ul className="list-disc ml-6 space-y-2">
-                        <li>We value effort more than technical ability (LITTLE TO NO AI)</li>
-                        <li>
-                          <span className="font-bold">Be original!</span> Don't be a direct copy of tutorials
-                        </li>
-                        <li>
-                          <span className="font-bold">Be personal.</span> You don't need to solve climate change.
-                        </li>
-                      </ul>
+                  <div className="pb-6 lg:pb-12">
+                    <div className="w-full border-2 border-dark-brown rounded-2xl overflow-hidden bg-white aspect-video">
+                      <video src="/intro.mp4" className="w-full h-full object-contain" autoPlay controls playsInline />
                     </div>
                   </div>
                 </div>
+              </ContentPhase>
+            )}
+          </PaginationPage>
 
-                <div className="flex flex-col gap-3 mt-4">
-                  <h3 className="font-outfit text-2xl lg:text-3xl font-bold">WHAT DO YOU WANT TO BUILD?</h3>
-                  <TextArea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="DESCRIBE IN 2-3 SENTENCES"
-                    className="rounded-2xl w-full h-32 lg:h-40 resize-none text-lg lg:text-xl p-4 lg:p-6"
-                  />
-                  <p className="text-base lg:text-xl text-brown">Jot something down! You can edit later</p>
-                </div>
-              </div>
-            </ContentPhase>
-          )}
-        </PaginationPage>
+          <PaginationPage>
+            {({ next, prev, currentPage, totalPages }) => (
+              <ContentPhase
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onContinue={next}
+                continueDisabled={!description.trim()}
+                onBack={prev}
+              >
+                <div className="flex flex-col gap-6 lg:gap-8 w-full max-w-4xl mx-auto my-auto">
+                  <div className="relative mt-8 lg:mt-12">
+                    <div className="mb-8 pb-2 flex flex-col gap-8 md:pb-0 md:mb-6 md:flex-row md:items-start md:justify-between md:gap-4">
+                      <h2 className="font-outfit text-3xl lg:text-5xl font-bold lg:pr-96">START YOUR FIRST PROJECT!</h2>
+                      <PosterCollage className="pointer-events-none relative z-10 w-56 aspect-video shrink-0 mx-auto md:mx-0 lg:hidden" />
+                    </div>
 
-        <PaginationPage>
-          {({ prev, currentPage, totalPages }) => (
-            <ContentPhase
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onBack={prev}
-              submitLabel={processing ? 'Creating...' : "Let's start!"}
-              submitDisabled={!name.trim() || !description.trim() || processing}
-            >
-              <div className="flex flex-col gap-6 lg:gap-8 w-full max-w-4xl mx-auto my-auto">
-                <h2 className="font-outfit text-3xl lg:text-5xl font-bold">HERE'S HOW IT WORKS</h2>
+                    <div className="relative">
+                      <PosterCollage className="pointer-events-none absolute right-0 -top-24 -right-8 z-10 hidden lg:block w-80 aspect-video" />
 
-                <div className="relative border-2 border-dark-brown rounded-2xl bg-white p-6 lg:p-8 text-base lg:text-xl">
-                  <p className="mb-4">We need to make sure the time is real.</p>
-                  <p className="mb-4">
-                    So... You'll be <span className="font-bold">timelapsing + journaling</span>!
-                  </p>
-                  <p className="leading-relaxed mb-4">
-                    Please read our{' '}
-                    <span className="relative inline-block">
-                      <a
-                        href="/docs/requirements/what-is-shipping"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline font-bold hover:text-brown transition-colors"
-                      >
-                        shipping & journaling guidelines
-                      </a>
-                      <span
-                        className="mt-7 hidden lg:flex items-center gap-2 absolute left-[102%] top-1/2 -translate-y-1/2 cursor-pointer w-max hover:opacity-80 transition-opacity"
-                        onClick={() => window.open('/docs', '_blank')}
-                      >
-                        <img src="/onboarding/arrow.svg" alt="" className="w-12" />
-                        <img
-                          src="/onboarding/guide.png"
-                          alt="Guide"
-                          className="w-28 hover:-translate-y-1 transition-transform"
-                        />
-                      </span>
-                    </span>
-                  </p>
-                  <p className="">Actually, take 15 min and just read everything.</p>
+                      <div className="border-2 border-dark-brown rounded-2xl bg-white p-6 lg:p-8 pr-6 lg:pr-72 text-base lg:text-xl">
+                        <p className="mb-4">Build as many hardware projects as you want!</p>
+                        <ul className="list-disc ml-6 space-y-2">
+                          <li>We value effort more than technical ability (LITTLE TO NO AI)</li>
+                          <li>
+                            <span className="font-bold">Be original!</span> Don't be a direct copy of tutorials
+                          </li>
+                          <li>
+                            <span className="font-bold">Be personal.</span> You don't need to solve climate change.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
 
-                  <div
-                    className="flex lg:hidden items-center gap-2 mt-4 cursor-pointer hover:opacity-80 transition-opacity w-max"
-                    onClick={() => window.open('/docs', '_blank')}
-                  >
-                    <img src="/onboarding/arrow.svg" alt="" className="w-8 sm:w-10" />
-                    <img
-                      src="/onboarding/guide.png"
-                      alt="Guide"
-                      className="w-16 sm:w-20 hover:-translate-y-1 transition-transform"
+                  <div className="flex flex-col gap-3 mt-4">
+                    <h3 className="font-outfit text-2xl lg:text-3xl font-bold">WHAT DO YOU WANT TO BUILD?</h3>
+                    <TextArea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="DESCRIBE IN 2-3 SENTENCES"
+                      className="rounded-2xl w-full h-32 lg:h-40 resize-none text-lg lg:text-xl p-4 lg:p-6"
                     />
+                    <p className="text-base lg:text-xl text-brown">Jot something down! You can edit later</p>
                   </div>
                 </div>
+              </ContentPhase>
+            )}
+          </PaginationPage>
 
-                <div className="flex flex-col gap-3 mt-4">
-                  <h3 className="font-outfit text-2xl lg:text-3xl font-bold">GIVE YOUR PROJECT A FUN NAME</h3>
-                  <Input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="My Awesome Project"
-                    className="rounded-2xl text-lg lg:text-xl p-4 lg:p-6"
-                  />
-                  <p className="text-base lg:text-xl text-brown">You'll be able to edit this later.</p>
+          <PaginationPage>
+            {({ prev, currentPage, totalPages }) => (
+              <ContentPhase
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onBack={prev}
+                submitLabel={finalizingSubmit || pathTransitionStarted || processing ? 'creating...' : "let's start"}
+                submitVisible={
+                  finalizingSubmit || pathTransitionStarted || processing || (!!name.trim() && !!description.trim())
+                }
+                submitDisabled={
+                  !name.trim() || !description.trim() || finalizingSubmit || pathTransitionStarted || processing
+                }
+                progress={finalizingSubmit || pathTransitionStarted || processing ? 100 : 96}
+                celebrateOnComplete={finalStepSubmitted}
+                completionKey={submitAttemptKey}
+                onProgressComplete={handleFinalProgressComplete}
+                isPathTransitioning={pathTransitionStarted && !is_modal}
+              >
+                <div className="flex flex-col gap-6 lg:gap-8 w-full max-w-4xl mx-auto my-auto">
+                  <h2 className="font-outfit text-3xl lg:text-5xl font-bold">HERE'S HOW IT WORKS</h2>
+
+                  <div className="relative border-2 border-dark-brown rounded-2xl bg-white p-6 lg:p-8 text-base lg:text-xl">
+                    <p className="mb-4">We need to make sure the time is real.</p>
+                    <p className="mb-4">
+                      So... You'll be <span className="font-bold">timelapsing + journaling</span>!
+                    </p>
+                    <p className="leading-relaxed mb-4">
+                      Please read our{' '}
+                      <span className="relative inline-block">
+                        <a
+                          href="/docs/requirements/what-is-shipping"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline font-bold hover:text-brown transition-colors"
+                        >
+                          shipping & journaling guidelines
+                        </a>
+                        <span
+                          className="mt-7 hidden lg:flex items-center gap-2 absolute left-[102%] top-1/2 -translate-y-1/2 cursor-pointer w-max hover:opacity-80 transition-opacity"
+                          onClick={() => window.open('/docs', '_blank')}
+                        >
+                          <img src="/onboarding/arrow.svg" alt="" className="w-12" />
+                          <img
+                            src="/onboarding/guide.png"
+                            alt="Guide"
+                            className="w-28 hover:-translate-y-1 transition-transform"
+                          />
+                        </span>
+                      </span>
+                    </p>
+                    <p className="">Actually, take 15 min and just read everything.</p>
+
+                    <div
+                      className="flex lg:hidden items-center gap-2 mt-4 cursor-pointer hover:opacity-80 transition-opacity w-max"
+                      onClick={() => window.open('/docs', '_blank')}
+                    >
+                      <img src="/onboarding/arrow.svg" alt="" className="w-8 sm:w-10" />
+                      <img
+                        src="/onboarding/guide.png"
+                        alt="Guide"
+                        className="w-16 sm:w-20 hover:-translate-y-1 transition-transform"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 mt-4">
+                    <h3 className="font-outfit text-2xl lg:text-3xl font-bold">GIVE YOUR PROJECT A FUN NAME</h3>
+                    <Input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="My Awesome Project"
+                      className="rounded-2xl text-lg lg:text-xl p-4 lg:p-6"
+                    />
+                    <p className="text-base lg:text-xl text-brown">You'll be able to edit this later.</p>
+                  </div>
                 </div>
-              </div>
-            </ContentPhase>
-          )}
-        </PaginationPage>
-      </Pagination>
-    </form>
+              </ContentPhase>
+            )}
+          </PaginationPage>
+        </Pagination>
+      </form>
+    </>
   )
 
   if (is_modal) {
@@ -230,7 +354,7 @@ function PosterCollage({ className }: { className: string }) {
   )
 }
 
-function SpinPhase({ onComplete }: { onComplete: () => void }) {
+function SpinPhase({ onComplete, onReliefDone }: { onComplete: () => void; onReliefDone: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const [visible, setVisible] = useState(false)
@@ -255,13 +379,16 @@ function SpinPhase({ onComplete }: { onComplete: () => void }) {
       document.addEventListener('click', playAudio, { once: true })
     })
 
-    const handleEnded = () => onComplete()
+    const handleEnded = () => {
+      playUrl('/heidisounds/relief.mp3', 1200, onReliefDone, 1.2).catch(onReliefDone)
+      onComplete()
+    }
     video.addEventListener('ended', handleEnded, { once: true })
     return () => {
       video.removeEventListener('ended', handleEnded)
       document.removeEventListener('click', playAudio)
     }
-  }, [onComplete])
+  }, [onComplete, onReliefDone])
 
   return (
     <div className="fixed inset-0 z-50 bg-dark-brown flex items-center justify-center">
@@ -278,33 +405,72 @@ function SpinPhase({ onComplete }: { onComplete: () => void }) {
   )
 }
 
-function Scene() {
+function Scene({ isTransitioning = false }: { isTransitioning?: boolean }) {
   return (
     <>
-      <div className="absolute bottom-0 left-0 bg-light-green h-[45%] w-full" />
+      <div
+        className="absolute bottom-0 left-0 bg-light-green w-full"
+        style={{
+          height: isTransitioning ? '80%' : '45%',
+          transition: `height ${pathTransitionMs}ms ${sceneTransitionEase}`,
+        }}
+      />
 
-      <div className="absolute top-0 left-0 right-0 h-[55%] overflow-hidden pointer-events-none">
-        <img src="/clouds/4.webp" alt="" className="absolute bottom-0 left-0 h-20 md:h-36 -translate-x-1/3" />
-        <img src="/clouds/1.webp" alt="" className="absolute bottom-0 left-40 h-20 md:h-32 translate-x-1/3" />
-        <img src="/clouds/2.webp" alt="" className="absolute bottom-0 right-0 -translate-x-5/6 h-20 md:h-28" />
-        <img src="/clouds/3.webp" alt="" className="absolute bottom-0 right-0 h-20 md:h-36 translate-x-1/3" />
+      <div
+        className="absolute top-0 left-0 right-0 overflow-hidden pointer-events-none"
+        style={{
+          height: isTransitioning ? '20%' : '55%',
+          transition: `height ${pathTransitionMs}ms ${sceneTransitionEase}`,
+        }}
+      >
+        <img
+          src="/clouds/4.webp"
+          alt=""
+          className="absolute bottom-0 left-0 h-30 md:h-50"
+          style={{ transform: 'translateX(-33.333%) translateY(0%) scale(1)' }}
+        />
+        <img
+          src="/clouds/1.webp"
+          alt=""
+          className="absolute bottom-0 left-40 h-30"
+          style={{ transform: 'translateX(33.333%) translateY(0%) scale(1)' }}
+        />
+        <img
+          src="/clouds/2.webp"
+          alt=""
+          className="absolute bottom-0 right-0 h-30"
+          style={{ transform: 'translateX(-83.333%) translateY(0%) scale(1)' }}
+        />
+        <img
+          src="/clouds/3.webp"
+          alt=""
+          className="absolute bottom-0 right-0 h-30 md:h-50 w-auto"
+          style={{ transform: 'translateX(33.333%) translateY(0%) scale(1)' }}
+        />
       </div>
 
-      <img src="/grass/1.svg" className="absolute bottom-[32%] left-[3%] z-1 w-8" />
-      <img src="/grass/2.svg" className="absolute bottom-[22%] left-[12%] z-1 w-10" />
-      <img src="/grass/3.svg" className="absolute bottom-[10%] left-[8%] z-1 w-9" />
-      <img src="/grass/4.svg" className="absolute bottom-[28%] left-[28%] z-1 w-7" />
-      <img src="/grass/5.svg" className="absolute bottom-[15%] left-[22%] z-1 w-8" />
-      <img src="/grass/6.svg" className="absolute bottom-[8%] left-[35%] z-1 w-7" />
-      <img src="/grass/7.svg" className="absolute bottom-[30%] left-[45%] z-1 w-8" />
-      <img src="/grass/8.svg" className="absolute bottom-[18%] left-[50%] z-1 w-9" />
-      <img src="/grass/9.svg" className="absolute bottom-[5%] left-[55%] z-1 w-7" />
-      <img src="/grass/10.svg" className="absolute bottom-[25%] right-[20%] z-1 w-8" />
-      <img src="/grass/11.svg" className="absolute bottom-[12%] right-[12%] z-1 w-10" />
-      <img src="/grass/1.svg" className="absolute bottom-[35%] right-[8%] z-1 w-7" />
-      <img src="/grass/3.svg" className="absolute bottom-[6%] right-[3%] z-1 w-8" />
-      <img src="/grass/5.svg" className="absolute bottom-[20%] right-[30%] z-1 w-6 hidden lg:block" />
-      <img src="/grass/7.svg" className="absolute bottom-[3%] left-[42%] z-1 w-7 hidden lg:block" />
+      <div
+        style={{
+          opacity: isTransitioning ? 0 : 1,
+          transition: `opacity ${pathTransitionMs}ms ${sceneTransitionEase}`,
+        }}
+      >
+        <img src="/grass/1.svg" className="absolute bottom-[32%] left-[3%] z-1 w-8" />
+        <img src="/grass/2.svg" className="absolute bottom-[22%] left-[12%] z-1 w-10" />
+        <img src="/grass/3.svg" className="absolute bottom-[10%] left-[8%] z-1 w-9" />
+        <img src="/grass/4.svg" className="absolute bottom-[28%] left-[28%] z-1 w-7" />
+        <img src="/grass/5.svg" className="absolute bottom-[15%] left-[22%] z-1 w-8" />
+        <img src="/grass/6.svg" className="absolute bottom-[8%] left-[35%] z-1 w-7" />
+        <img src="/grass/7.svg" className="absolute bottom-[30%] left-[45%] z-1 w-8" />
+        <img src="/grass/8.svg" className="absolute bottom-[18%] left-[50%] z-1 w-9" />
+        <img src="/grass/9.svg" className="absolute bottom-[5%] left-[55%] z-1 w-7" />
+        <img src="/grass/10.svg" className="absolute bottom-[25%] right-[20%] z-1 w-8" />
+        <img src="/grass/11.svg" className="absolute bottom-[12%] right-[12%] z-1 w-10" />
+        <img src="/grass/1.svg" className="absolute bottom-[35%] right-[8%] z-1 w-7" />
+        <img src="/grass/3.svg" className="absolute bottom-[6%] right-[3%] z-1 w-8" />
+        <img src="/grass/5.svg" className="absolute bottom-[20%] right-[30%] z-1 w-6 hidden lg:block" />
+        <img src="/grass/7.svg" className="absolute bottom-[3%] left-[42%] z-1 w-7 hidden lg:block" />
+      </div>
     </>
   )
 }
@@ -316,7 +482,13 @@ function ContentPhase({
   continueDisabled = false,
   onBack,
   submitLabel,
+  submitVisible = false,
   submitDisabled = false,
+  progress,
+  celebrateOnComplete = false,
+  completionKey,
+  onProgressComplete,
+  isPathTransitioning = false,
   children,
 }: {
   currentPage: number
@@ -325,93 +497,108 @@ function ContentPhase({
   continueDisabled?: boolean
   onBack?: () => void
   submitLabel?: string
+  submitVisible?: boolean
   submitDisabled?: boolean
+  progress?: number
+  celebrateOnComplete?: boolean
+  completionKey?: number
+  onProgressComplete?: () => void
+  isPathTransitioning?: boolean
   children: ReactNode
 }) {
-  const [visible, setVisible] = useState(false)
+  const [forwardTransitioning, setForwardTransitioning] = useState(false)
+  const forwardTransitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const continueVisible = !!onContinue && !continueDisabled
+  const submitInProgress = submitLabel === 'creating...'
+  const baseProgress = totalPages > 1 ? (currentPage / (totalPages - 1)) * 100 : 0
+  const currentProgress = progress ?? baseProgress
+  const buttonsLocked = submitInProgress || forwardTransitioning
 
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), 50)
-    return () => clearTimeout(timer)
+    return () => {
+      if (forwardTransitionTimeoutRef.current) {
+        clearTimeout(forwardTransitionTimeoutRef.current)
+      }
+    }
   }, [])
 
-  return (
-    <div className="fixed inset-0 z-50 p-16 bg-light-blue flex flex-col text-dark-brown overflow-hidden">
-      <Scene />
+  useEffect(() => {
+    if (forwardTransitionTimeoutRef.current) {
+      clearTimeout(forwardTransitionTimeoutRef.current)
+      forwardTransitionTimeoutRef.current = null
+    }
 
-      <div className="relative z-10 px-8 pt-6">
-        <style>{`
-          @keyframes progress-stripe {
-            0% { background-position: 0 0; }
-            100% { background-position: 42.43px 0; }
-          }
-        `}</style>
-        <div className="w-full max-w-4xl mx-auto h-8 bg-white rounded-full border-3 border-gray-950 border-b-[6px] overflow-hidden relative">
-          <div
-            className="h-full bg-blue transition-all duration-500 relative rounded-full"
-            style={{ width: `${Math.round((currentPage / totalPages) * 100)}%` }}
-          >
-            <div
-              className="absolute inset-0 opacity-30 mix-blend-overlay"
-              style={{
-                backgroundImage:
-                  'repeating-linear-gradient(-45deg, transparent, transparent 15px, white 15px, white 30px)',
-                backgroundSize: '42.43px 42.43px',
-                animation: 'progress-stripe 1.5s linear infinite',
-              }}
-            />
-          </div>
-        </div>
+    setForwardTransitioning(false)
+  }, [currentPage])
+
+  function handleContinue() {
+    if (!onContinue || continueDisabled || forwardTransitioning) return
+
+    setForwardTransitioning(true)
+    forwardTransitionTimeoutRef.current = setTimeout(() => {
+      forwardTransitionTimeoutRef.current = null
+      onContinue()
+    }, contentPhaseForwardTransitionMs)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-light-blue p-4 text-dark-brown sm:p-6 lg:p-16">
+      <Scene isTransitioning={isPathTransitioning} />
+
+      <div
+        className="relative z-10 px-2 pt-4 sm:px-4 sm:pt-5 lg:px-8 lg:pt-6"
+        style={
+          isPathTransitioning
+            ? {
+                opacity: 0,
+                transform: 'translateY(28px)',
+                filter: 'blur(4px)',
+                transition: `opacity 480ms ${sceneTransitionEase}, transform 680ms ${sceneTransitionEase}, filter 480ms ${sceneTransitionEase}`,
+              }
+            : undefined
+        }
+      >
+        <ProgressBar
+          progress={currentProgress}
+          celebrateOnComplete={celebrateOnComplete}
+          completionKey={completionKey}
+          onCompleteVisualsFinished={celebrateOnComplete ? onProgressComplete : undefined}
+        />
       </div>
 
       <div
-        className="relative z-10 flex-1 flex flex-col px-8 py-12 overflow-y-auto transition-opacity duration-1000"
-        style={{ opacity: visible ? 1 : 0 }}
+        className="relative z-10 flex min-h-0 flex-1 flex-col"
+        style={
+          isPathTransitioning
+            ? {
+                opacity: 0,
+                transform: 'translateY(28px)',
+                filter: 'blur(4px)',
+                transition: `opacity 480ms ${sceneTransitionEase}, transform 680ms ${sceneTransitionEase}, filter 480ms ${sceneTransitionEase}`,
+              }
+            : undefined
+        }
       >
-        {children}
-      </div>
+        <div className="flex-1 min-h-0 overflow-y-auto" style={{ pointerEvents: buttonsLocked ? 'none' : undefined }}>
+          <div className="flex min-h-full flex-col px-2 pt-6 pb-6 sm:px-4 sm:pt-8 lg:px-8 lg:pt-12 lg:pb-8">
+            {children}
+          </div>
+        </div>
 
-      <div className="relative z-20 flex items-center justify-between px-8 pb-4">
-        {onBack ? (
-          <button
-            className="flex items-center gap-3 text-2xl lg:text-3xl font-bold cursor-pointer hover:text-brown transition-colors"
-            onClick={onBack}
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-              className="w-8 h-8 lg:w-10 lg:h-10"
-            >
-              <path
-                fillRule="evenodd"
-                d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Go back
-          </button>
-        ) : (
-          <div />
-        )}
-
-        {submitLabel ? (
-          <button
-            type="submit"
-            disabled={submitDisabled}
-            className="py-4 px-10 lg:py-5 lg:px-14 bg-dark-brown text-light-brown rounded-2xl font-bold text-xl lg:text-2xl hover:bg-light-brown hover:text-dark-brown transition-all border-dark-brown border-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {submitLabel}
-          </button>
-        ) : onContinue ? (
-          <button
-            disabled={continueDisabled}
-            className="py-4 px-10 lg:py-5 lg:px-14 bg-dark-brown text-light-brown rounded-2xl font-bold text-xl lg:text-2xl hover:bg-light-brown hover:text-dark-brown transition-all border-dark-brown border-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={continueDisabled ? undefined : onContinue}
-          >
-            continue
-          </button>
-        ) : null}
+        <div className="shrink-0 px-2 pb-2 pt-4 sm:px-4 sm:pb-4 lg:px-8 lg:pb-8">
+          <NavigationButtons
+            layout="footer"
+            backVisible={!!onBack && !isPathTransitioning}
+            backDisabled={buttonsLocked}
+            onBack={onBack}
+            continueVisible={submitLabel ? submitVisible : continueVisible}
+            continueDisabled={submitLabel ? submitDisabled : continueDisabled || forwardTransitioning}
+            continueLabel={submitLabel ?? 'continue'}
+            continueType={submitLabel ? 'submit' : 'button'}
+            onContinue={submitLabel ? undefined : handleContinue}
+            continueTransitionOut={forwardTransitioning || isPathTransitioning}
+          />
+        </div>
       </div>
     </div>
   )
@@ -420,31 +607,40 @@ function ContentPhase({
 function DialogueScene({
   prompt = null,
   angry = false,
+  dialogueEnabled = true,
   onContinue,
   onBack,
 }: {
   prompt?: string | null
   angry?: boolean
+  dialogueEnabled?: boolean
   onContinue: () => void
   onBack?: () => void
 }) {
-  const [visible, setVisible] = useState(false)
+  const { displayedText, isComplete, skip } = useDialogue(prompt ?? '', {
+    enabled: !!prompt && dialogueEnabled,
+  })
+
+  // While waiting for relief to finish, show an empty bubble with a waiting cursor
+  const bubbleText = prompt && !dialogueEnabled ? '' : displayedText
+  const showCursor = !!prompt && (!isComplete || !dialogueEnabled)
+  const continueReady = !prompt || (dialogueEnabled && isComplete)
 
   useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), 50)
-    return () => clearTimeout(timer)
-  }, [])
+    if (!angry) return
+    playUrl('/heidisounds/angy.mp3', 400, undefined, 1.2).catch(() => {})
+  }, [angry])
 
   return (
     <div className="fixed inset-0 z-50 bg-light-blue flex flex-col items-center text-dark-brown overflow-hidden">
       <Scene />
 
       <section
-        className="relative z-10 w-full flex-1 flex justify-center items-center flex-col transition-opacity duration-1000"
-        style={{ opacity: visible ? 1 : 0 }}
+        className="relative z-10 w-full flex-1 flex justify-center items-center flex-col cursor-pointer"
+        onClick={prompt ? skip : undefined}
       >
         {prompt ? (
-          <SpeechBubble text={prompt} />
+          <SpeechBubble text={bubbleText} showCursor={showCursor} />
         ) : (
           <div className="invisible">
             <SpeechBubble text="." />
@@ -459,22 +655,13 @@ function DialogueScene({
         </div>
       </section>
 
-      {onBack && (
-        <button
-          className="z-20 absolute bottom-4 left-4 text-lg underline cursor-pointer flex items-center h-12"
-          onClick={onBack}
-        >
-          go back
-        </button>
-      )}
-
-      <button
-        className="z-20 absolute bottom-6 right-6 lg:bottom-10 lg:right-10 py-4 px-10 lg:py-5 lg:px-14 bg-dark-brown text-light-brown rounded-2xl font-bold text-xl lg:text-2xl hover:bg-light-brown hover:text-dark-brown transition-all border-dark-brown border-2"
-        style={{ opacity: visible ? 1 : 0, transitionDuration: '1000ms' }}
-        onClick={onContinue}
-      >
-        continue
-      </button>
+      <NavigationButtons
+        backVisible={!!onBack}
+        onBack={onBack}
+        continueVisible={continueReady}
+        continueLabel="continue"
+        onContinue={onContinue}
+      />
     </div>
   )
 }

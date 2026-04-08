@@ -16,7 +16,7 @@ class ProjectPolicy < ApplicationPolicy
 
   def create?
     return false unless user.present?
-    return user.projects.count < 1 if user.trial?
+    return !user.projects.kept.exists? if user.trial?
 
     true
   end

@@ -1,4 +1,21 @@
-import React, { createContext, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, {
+  createContext,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
+import { motion } from 'motion/react'
+
+// Must be module-scope (before any component renders) to prevent browser scroll
+// restoration from flashing a stale position on reload
+if (typeof window !== 'undefined') {
+  history.scrollRestoration = 'manual'
+}
 
 const HORIZON_PCT = 0
 const PERSPECTIVE = 800
@@ -26,6 +43,32 @@ const GRASS_SCALE_RANGE = 0.1 // scale varies ± this from base
 const GRASS_BASE_ROTATION = 0 // degrees (rotateZ lean)
 const GRASS_ROTATION_RANGE = 15 // rotation varies ± this from base
 const GRASS_IMAGES = Array.from({ length: 11 }, (_, i) => `/grass/${i + 1}.svg`)
+const PATH_ENTRY_NODE_DURATION_MS = 720
+const PATH_ENTRY_GRASS_FADE_DURATION_MS = 480
+const PATH_ENTRY_SCROLL_DURATION_MS = 1050
+const PATH_ENTRY_EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+
+const ONBOARDING_GRASS_SPRITES: Array<{
+  src: string
+  className?: string
+  style: CSSProperties
+}> = [
+  { src: '/grass/1.svg', style: { bottom: '32%', left: '3%', width: '2rem' } },
+  { src: '/grass/2.svg', style: { bottom: '22%', left: '12%', width: '2.5rem' } },
+  { src: '/grass/3.svg', style: { bottom: '10%', left: '8%', width: '2.25rem' } },
+  { src: '/grass/4.svg', style: { bottom: '28%', left: '28%', width: '1.75rem' } },
+  { src: '/grass/5.svg', style: { bottom: '15%', left: '22%', width: '2rem' } },
+  { src: '/grass/6.svg', style: { bottom: '8%', left: '35%', width: '1.75rem' } },
+  { src: '/grass/7.svg', style: { bottom: '30%', left: '45%', width: '2rem' } },
+  { src: '/grass/8.svg', style: { bottom: '18%', left: '50%', width: '2.25rem' } },
+  { src: '/grass/9.svg', style: { bottom: '5%', left: '55%', width: '1.75rem' } },
+  { src: '/grass/10.svg', style: { bottom: '25%', right: '20%', width: '2rem' } },
+  { src: '/grass/11.svg', style: { bottom: '12%', right: '12%', width: '2.5rem' } },
+  { src: '/grass/1.svg', style: { bottom: '35%', right: '8%', width: '1.75rem' } },
+  { src: '/grass/3.svg', style: { bottom: '6%', right: '3%', width: '2rem' } },
+  { src: '/grass/5.svg', className: 'hidden lg:block', style: { bottom: '20%', right: '30%', width: '1.5rem' } },
+  { src: '/grass/7.svg', className: 'hidden lg:block', style: { bottom: '3%', left: '42%', width: '1.75rem' } },
+]
 
 function screenYAt(d: number, R: number, H: number) {
   const cZ = (d * d) / (2 * R)
@@ -43,6 +86,14 @@ function findGroundD(targetScreenY: number, R: number, H: number, peakD: number)
     else hi = mid
   }
   return (lo + hi) / 2
+}
+
+function easeOutCubic(t: number) {
+  return 1 - (1 - t) ** 3
+}
+
+function prefersReducedMotion() {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 export const PathCenterContext = createContext<number>(0)
@@ -92,9 +143,16 @@ const PERSPECTIVE_OFFSET_PX = Math.round(PERSPECTIVE * COT_ANGLE)
 
 type PathProps = {
   nodes: ReactNode[]
+  introTransition?: {
+    active: boolean
+    mode: 'regular' | 'onboarding'
+    sceneReady: boolean
+    nodesVisible: boolean
+    targetNodeIndex: number
+  }
 }
 
-export default function Path({ nodes }: PathProps) {
+export default function Path({ nodes, introTransition }: PathProps) {
   const billboards = useMemo(() => generateBillboards(nodes.length), [nodes.length])
 
   const [ready, setReady] = useState(false)
@@ -112,6 +170,15 @@ export default function Path({ nodes }: PathProps) {
   const backCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const frontCtxRef = useRef<CanvasRenderingContext2D | null>(null)
   const grassImagesRef = useRef<Map<string, HTMLImageElement>>(new Map())
+  const updateBillboardsRef = useRef<() => void>(() => {})
+  const scrollLockRef = useRef<{ target: number; until: number } | null>(null)
+  const initialScrollDoneRef = useRef(false)
+  const introScrollStartedRef = useRef(false)
+  const introActive = introTransition?.active ?? false
+  const introMode = introTransition?.mode ?? 'regular'
+  const introSceneReady = introTransition?.sceneReady ?? true
+  const introNodesVisible = introTransition?.nodesVisible ?? true
+  const introTargetNodeIndex = introTransition?.targetNodeIndex ?? 0
 
   useEffect(() => {
     let timeout: number
@@ -181,19 +248,29 @@ export default function Path({ nodes }: PathProps) {
   }, [firstBillboardY, lastBillboardY, topGroundY, bottomGroundY, inflectionGroundY])
   const maxScroll = (lastBillboardY - firstBillboardY + bottomGroundY - topGroundY) / SCROLL_SPEED
 
-  const scrollToNode = useCallback(
+  const scrollTopForNode = useCallback(
     (nodeIndex: number) => {
+      if (billboards.length === 0 || nodes.length === 0) return 0
+
       const H = windowSize.h
-      const billboardIndex = billboards.length - 1 - nodeIndex
-      if (billboardIndex < 0 || billboardIndex >= billboards.length) return
+      const safeNodeIndex = Math.max(0, Math.min(nodes.length - 1, nodeIndex))
+      const billboardIndex = billboards.length - 1 - safeNodeIndex
+      if (billboardIndex < 0 || billboardIndex >= billboards.length) return 0
       const b = billboards[billboardIndex]
       const targetScreenY = H * (1 - SCROLL_TO_BOTTOM_PCT / 100)
       const targetGroundD = findGroundD(targetScreenY, planetRadius, H, inflectionGroundY)
       // rawY = b.y + scrollY * SCROLL_SPEED + topGroundY - lastBillboardY = targetGroundD
       const scrollY = (targetGroundD - b.y - topGroundY + lastBillboardY) / SCROLL_SPEED
-      window.scrollTo({ top: Math.max(0, Math.min(maxScroll, scrollY)), behavior: 'smooth' })
+      return Math.max(0, Math.min(maxScroll, scrollY))
     },
-    [billboards, windowSize.h, planetRadius, inflectionGroundY, topGroundY, lastBillboardY, maxScroll],
+    [billboards, windowSize.h, planetRadius, inflectionGroundY, topGroundY, lastBillboardY, maxScroll, nodes.length],
+  )
+
+  const scrollToNode = useCallback(
+    (nodeIndex: number) => {
+      window.scrollTo({ top: scrollTopForNode(nodeIndex), behavior: 'smooth' })
+    },
+    [scrollTopForNode],
   )
 
   useEffect(() => {
@@ -329,6 +406,22 @@ export default function Path({ nodes }: PathProps) {
 
     let ticking = false
     const handleScroll = () => {
+      // Guard against browser scroll restoration overriding our position
+      const lock = scrollLockRef.current
+      if (lock && performance.now() < lock.until) {
+        if (Math.abs(window.scrollY - lock.target) > 2) {
+          window.scrollTo({ top: lock.target, behavior: 'auto' })
+          scrollRef.current = lock.target
+          if (!ticking) {
+            rafRef.current = requestAnimationFrame(() => {
+              update()
+              ticking = false
+            })
+            ticking = true
+          }
+          return
+        }
+      }
       scrollRef.current = window.scrollY
       if (!ticking) {
         rafRef.current = requestAnimationFrame(() => {
@@ -345,6 +438,7 @@ export default function Path({ nodes }: PathProps) {
     })
     Promise.all(loadPromises).then(() => update())
 
+    updateBillboardsRef.current = update
     window.addEventListener('scroll', handleScroll, { passive: true })
     update()
     setReady(true)
@@ -352,9 +446,114 @@ export default function Path({ nodes }: PathProps) {
       window.removeEventListener('scroll', handleScroll)
       cancelAnimationFrame(rafRef.current)
     }
-  }, [billboards, grass, planetRadius, inflectionGroundY, topGroundY, lastBillboardY, windowSize.w])
+  }, [
+    billboards,
+    firstBillboardY,
+    grass,
+    inflectionGroundY,
+    lastBillboardY,
+    planetRadius,
+    topGroundY,
+    windowSize.h,
+    windowSize.w,
+  ])
+
+  useEffect(() => {
+    if (!introActive) {
+      introScrollStartedRef.current = false
+    }
+  }, [introActive])
+
+  // Position scroll at the very end of the path before first paint
+  useLayoutEffect(() => {
+    if (initialScrollDoneRef.current || !introActive) return
+    initialScrollDoneRef.current = true
+    scrollRef.current = maxScroll
+    window.scrollTo({ top: maxScroll, behavior: 'auto' })
+  }, [introActive, maxScroll])
+
+  useEffect(() => {
+    if (!introActive || !introNodesVisible || !ready || introScrollStartedRef.current) {
+      return
+    }
+
+    introScrollStartedRef.current = true
+
+    const target = scrollTopForNode(introTargetNodeIndex)
+    let frame = 0
+
+    // Force scroll to the end before starting animation — ensures correct
+    // starting position even if the browser moved scroll (e.g. restoration)
+    scrollRef.current = maxScroll
+    window.scrollTo({ top: maxScroll, behavior: 'auto' })
+    updateBillboardsRef.current()
+
+    const startedAt = performance.now()
+    const start = maxScroll
+
+    // Lock scroll position after animation to block late browser scroll restoration
+    const activateLock = () => {
+      scrollLockRef.current = { target, until: performance.now() + 2000 }
+    }
+
+    if (Math.abs(target - start) < 1) {
+      scrollRef.current = target
+      window.scrollTo({ top: target, behavior: 'auto' })
+      updateBillboardsRef.current()
+      activateLock()
+      return
+    }
+
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / PATH_ENTRY_SCROLL_DURATION_MS)
+      const next = start + (target - start) * easeOutCubic(progress)
+      scrollRef.current = next
+      window.scrollTo({ top: next, behavior: 'auto' })
+      // Sync billboard positions in the same frame — avoids one-frame lag
+      // that causes visual flashing when relying on the scroll event handler
+      updateBillboardsRef.current()
+
+      if (progress < 1) {
+        frame = requestAnimationFrame(tick)
+      } else {
+        scrollRef.current = target
+        activateLock()
+      }
+    }
+
+    frame = requestAnimationFrame(tick)
+
+    return () => {
+      cancelAnimationFrame(frame)
+    }
+  }, [introActive, introNodesVisible, introTargetNodeIndex, ready, scrollTopForNode, maxScroll])
 
   const centerX = (windowSize.w - RIGHT_MARGIN) / 2
+  const isOnboardingHandoff = introActive && introMode === 'onboarding'
+  const handoffMode = isOnboardingHandoff && !introSceneReady
+  const showOnboardingGrassOverlay = isOnboardingHandoff && (handoffMode || !ready)
+  const skyHeight = `${INFLECTION_PCT}%`
+
+  const sharedGroundStyle: CSSProperties = {}
+
+  const liveGroundFadeStyle: CSSProperties = introActive
+    ? {
+        opacity: introSceneReady ? 1 : 0,
+        transition: `opacity ${PATH_ENTRY_GRASS_FADE_DURATION_MS}ms ${PATH_ENTRY_EASE} ${introSceneReady ? 100 : 0}ms`,
+      }
+    : {}
+
+  const onboardingGrassOverlayStyle: CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    opacity: showOnboardingGrassOverlay ? 1 : 0,
+    transition: `opacity ${PATH_ENTRY_GRASS_FADE_DURATION_MS}ms ${PATH_ENTRY_EASE}`,
+  }
+
+  function cloudTransform(finalTransform: string) {
+    return { transform: finalTransform } satisfies CSSProperties
+  }
 
   return (
     <PathCenterContext.Provider value={centerX}>
@@ -367,7 +566,7 @@ export default function Path({ nodes }: PathProps) {
             top: 0,
             left: 0,
             right: 0,
-            height: `${INFLECTION_PCT}%`,
+            height: skyHeight,
             background: 'var(--color-light-blue)',
           }}
         />
@@ -378,24 +577,74 @@ export default function Path({ nodes }: PathProps) {
             top: 0,
             left: 0,
             right: 0,
-            height: `${INFLECTION_PCT}%`,
+            height: skyHeight,
             overflow: 'hidden',
             pointerEvents: 'none',
           }}
         >
-          <img src="/clouds/4.webp" alt="" className="absolute bottom-0 left-0 h-30 md:h-50 -translate-x-1/3" />
-          <img src="/clouds/1.webp" alt="" className="absolute bottom-0 left-40 h-30 translate-x-1/3" />
-          <img src="/clouds/2.webp" alt="" className="absolute bottom-0 right-0 -translate-x-5/6 h-30" />
-          <img src="/clouds/3.webp" alt="" className="absolute bottom-0 right-0 h-30 md:h-50 w-auto translate-x-1/3" />
+          <img
+            src="/clouds/4.webp"
+            alt=""
+            className="absolute bottom-0 left-0 h-30 md:h-50"
+            style={cloudTransform('translateX(-33.333%) translateY(0px) scale(1)')}
+          />
+          <img
+            src="/clouds/1.webp"
+            alt=""
+            className="absolute bottom-0 left-40 h-30"
+            style={cloudTransform('translateX(33.333%) translateY(0px) scale(1)')}
+          />
+          <img
+            src="/clouds/2.webp"
+            alt=""
+            className="absolute bottom-0 right-0 h-30"
+            style={cloudTransform('translateX(-83.333%) translateY(0px) scale(1)')}
+          />
+          <img
+            src="/clouds/3.webp"
+            alt=""
+            className="absolute bottom-0 right-0 h-30 md:h-50 w-auto"
+            style={cloudTransform('translateX(33.333%) translateY(0px) scale(1)')}
+          />
+        </div>
+
+        <div style={onboardingGrassOverlayStyle}>
+          {ONBOARDING_GRASS_SPRITES.map((sprite, index) => (
+            <img
+              key={`${sprite.src}-${index}`}
+              src={sprite.src}
+              alt=""
+              className={sprite.className}
+              style={{
+                position: 'absolute',
+                height: 'auto',
+                ...sprite.style,
+              }}
+            />
+          ))}
         </div>
 
         {/* Back grass canvas */}
         <canvas
           ref={backCanvasRef}
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            visibility: ready ? 'visible' : 'hidden',
+            ...sharedGroundStyle,
+            ...liveGroundFadeStyle,
+          }}
         />
         {/* Back billboard scene — past inflection (behind cover) */}
-        <div
+        <motion.div
+          initial={false}
+          animate={{ opacity: introActive ? (introNodesVisible ? 1 : 0) : 1 }}
+          transition={{
+            duration: PATH_ENTRY_NODE_DURATION_MS / 1000,
+            ease: [0.22, 1, 0.36, 1],
+            delay: introActive && introNodesVisible ? 0.04 : 0,
+          }}
           style={{
             position: 'absolute',
             inset: 0,
@@ -448,7 +697,7 @@ export default function Path({ nodes }: PathProps) {
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
         {/* Hill cover */}
         <div
           style={{
@@ -459,15 +708,30 @@ export default function Path({ nodes }: PathProps) {
             bottom: 0,
             background: 'var(--color-light-green)',
             pointerEvents: 'none',
+            ...sharedGroundStyle,
           }}
         />
         {/* Front grass canvas */}
         <canvas
           ref={frontCanvasRef}
-          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', visibility: ready ? 'visible' : 'hidden' }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            visibility: ready ? 'visible' : 'hidden',
+            ...sharedGroundStyle,
+            ...liveGroundFadeStyle,
+          }}
         />
         {/* Front billboard scene — before inflection (in front of cover) */}
-        <div
+        <motion.div
+          initial={false}
+          animate={{ opacity: introActive ? (introNodesVisible ? 1 : 0) : 1 }}
+          transition={{
+            duration: PATH_ENTRY_NODE_DURATION_MS / 1000,
+            ease: [0.22, 1, 0.36, 1],
+            delay: introActive && introNodesVisible ? 0.14 : 0,
+          }}
           style={{
             position: 'absolute',
             inset: 0,
@@ -517,7 +781,7 @@ export default function Path({ nodes }: PathProps) {
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
       </div>
     </PathCenterContext.Provider>
   )
