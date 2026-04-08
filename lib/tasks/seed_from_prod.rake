@@ -5,14 +5,14 @@ namespace :seed do
     prod = PG.connect(prod_url)
 
     # 5 users with good recording variety
-    user_ids = [2342, 69, 65, 37, 2539] # Felix, the_idk, KK, cooper, Creative Drone
+    user_ids = [ 2342, 69, 65, 37, 2539 ] # Felix, the_idk, KK, cooper, Creative Drone
 
     id_map = { users: {}, projects: {}, journal_entries: {}, lookout_timelapses: {}, lapse_timelapses: {}, you_tube_videos: {} }
 
     puts "=== Pulling users ==="
     users_data = prod.exec_params(
       "SELECT id, display_name, email, avatar, array_to_json(roles)::text as roles, slack_id, timezone, type, is_adult, onboarded, verification_status, created_at
-       FROM users WHERE id = ANY($1)", ["{#{user_ids.join(",")}}"]
+       FROM users WHERE id = ANY($1)", [ "{#{user_ids.join(",")}}" ]
     )
     users_data.each do |row|
       existing = User.find_by(email: row["email"])
@@ -43,7 +43,7 @@ namespace :seed do
     puts "\n=== Pulling projects ==="
     projects_data = prod.exec_params(
       "SELECT id, name, description, repo_link, demo_link, is_unlisted, tags::text, user_id, created_at
-       FROM projects WHERE user_id = ANY($1) AND discarded_at IS NULL", ["{#{user_ids.join(",")}}"]
+       FROM projects WHERE user_id = ANY($1) AND discarded_at IS NULL", [ "{#{user_ids.join(",")}}" ]
     )
     projects_data.each do |row|
       local_user_id = id_map[:users][row["user_id"].to_i]
@@ -69,7 +69,7 @@ namespace :seed do
     je_data = prod.exec_params(
       "SELECT id, content, project_id, user_id, created_at
        FROM journal_entries WHERE project_id = ANY($1) AND discarded_at IS NULL
-       ORDER BY created_at", ["{#{prod_project_ids.join(",")}}"]
+       ORDER BY created_at", [ "{#{prod_project_ids.join(",")}}" ]
     )
     je_data.each do |row|
       local_project_id = id_map[:projects][row["project_id"].to_i]
@@ -94,7 +94,7 @@ namespace :seed do
     rec_data = prod.exec_params(
       "SELECT id, recordable_type, recordable_id, journal_entry_id, user_id, created_at
        FROM recordings WHERE journal_entry_id = ANY($1)
-       ORDER BY created_at", ["{#{prod_je_ids.join(",")}}"]
+       ORDER BY created_at", [ "{#{prod_je_ids.join(",")}}" ]
     )
 
     # Collect recordable IDs by type
@@ -106,7 +106,7 @@ namespace :seed do
       puts "  Pulling #{recordable_ids["LookoutTimelapse"].size} LookoutTimelapses..."
       lt_data = prod.exec_params(
         "SELECT id, user_id, session_token, name, duration, playback_url, thumbnail_url, created_at
-         FROM lookout_timelapses WHERE id = ANY($1)", ["{#{recordable_ids["LookoutTimelapse"].join(",")}}"]
+         FROM lookout_timelapses WHERE id = ANY($1)", [ "{#{recordable_ids["LookoutTimelapse"].join(",")}}" ]
       )
       lt_data.each do |row|
         local_user_id = id_map[:users][row["user_id"].to_i]
@@ -129,7 +129,7 @@ namespace :seed do
       puts "  Pulling #{recordable_ids["LapseTimelapse"].size} LapseTimelapses..."
       lapse_data = prod.exec_params(
         "SELECT id, user_id, lapse_timelapse_id, name, duration, playback_url, thumbnail_url, description, owner_handle, created_at
-         FROM lapse_timelapses WHERE id = ANY($1)", ["{#{recordable_ids["LapseTimelapse"].join(",")}}"]
+         FROM lapse_timelapses WHERE id = ANY($1)", [ "{#{recordable_ids["LapseTimelapse"].join(",")}}" ]
       )
       lapse_data.each do |row|
         local_user_id = id_map[:users][row["user_id"].to_i]
@@ -154,7 +154,7 @@ namespace :seed do
       puts "  Pulling #{recordable_ids["YouTubeVideo"].size} YouTubeVideos..."
       yt_data = prod.exec_params(
         "SELECT id, video_id, title, description, channel_id, channel_title, thumbnail_url, duration_seconds, published_at, was_live, created_at
-         FROM you_tube_videos WHERE id = ANY($1)", ["{#{recordable_ids["YouTubeVideo"].join(",")}}"]
+         FROM you_tube_videos WHERE id = ANY($1)", [ "{#{recordable_ids["YouTubeVideo"].join(",")}}" ]
       )
       yt_data.each do |row|
         yt = YouTubeVideo.new(

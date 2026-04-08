@@ -59,7 +59,8 @@ export function consumePathEntryTransition(): PathEntryTransition | null {
       kind: parsed.kind,
       createdAt: parsed.createdAt,
       introMode: parsed.introMode === 'onboarding' ? parsed.introMode : undefined,
-      pendingModal: parsed.pendingModal === 'projects' || parsed.pendingModal === 'journal' ? parsed.pendingModal : undefined,
+      pendingModal:
+        parsed.pendingModal === 'projects' || parsed.pendingModal === 'journal' ? parsed.pendingModal : undefined,
       projectId: typeof parsed.projectId === 'number' ? parsed.projectId : undefined,
       readDocsNudge: parsed.readDocsNudge === true ? true : undefined,
     }
