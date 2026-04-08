@@ -78,12 +78,12 @@ class ProjectsController < ApplicationController
       if request.headers["X-InertiaUI-Modal"].present? && params[:return_to] != "path"
         head :no_content
       else
-        # Onboarding flows use return_to to land on /path autoopen the projects modal
+        # Onboarding flows land on /path and let the frontend finish the handoff before opening any modal
         destination = case params[:return_to]
         when "path"
           path_path
         when "path_projects"
-          path_path(open: "projects", nudge: "read_docs")
+          path_path
         else
           projects_path
         end
