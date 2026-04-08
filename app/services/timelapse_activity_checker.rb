@@ -14,10 +14,18 @@ class TimelapseActivityChecker
   # 1 timelapse second ≈ 1 real minute. Only flag inactivity segments >= 2 real minutes.
   MIN_INACTIVE_SECONDS = 2
 
-  def initialize(recordable, blackframe_amount: BLACKFRAME_AMOUNT, blackframe_threshold: BLACKFRAME_THRESHOLD)
+  FILTER_COMPLEX = format(
+    "[0:v]fps=%<sample_fps>d,format=gray,split[a][b];" \
+    "[a]trim=start_frame=1,setpts=PTS-STARTPTS[shifted];" \
+    "[b][shifted]blend=all_mode=difference:eof_action=endall," \
+    "blackframe=amount=%<blackframe_amount>d:threshold=%<blackframe_threshold>d",
+    sample_fps: SAMPLE_FPS,
+    blackframe_amount: BLACKFRAME_AMOUNT,
+    blackframe_threshold: BLACKFRAME_THRESHOLD
+  ).freeze
+
+  def initialize(recordable)
     @recordable = recordable
-    @blackframe_amount = blackframe_amount
-    @blackframe_threshold = blackframe_threshold
   end
 
   def run
@@ -30,13 +38,15 @@ class TimelapseActivityChecker
   end
 
   # Analyze a video file directly (for testing without a record).
-  def self.run_on_file(file, **opts)
-    new(nil, **opts).run_on_file(file)
+  def self.run_on_file(file)
+    new(nil).run_on_file(file)
   end
 
   def run_on_file(file)
-    path = file.respond_to?(:path) ? file.path : file.to_s
-    output = run_ffmpeg_analysis(path)
+    ffmpeg_input = prepare_ffmpeg_input(file)
+    return empty_result unless ffmpeg_input
+
+    output = run_ffmpeg_analysis(ffmpeg_input.path)
     return empty_result if output.nil?
 
     total_pairs, inactive_indices = parse_ffmpeg_output(output)
@@ -53,6 +63,8 @@ class TimelapseActivityChecker
       inactive_percentage: total_pairs > 0 ? (inactive_frame_count.to_f / total_pairs * 100).round(1) : 0.0,
       segments: segments
     }
+  ensure
+    ffmpeg_input&.close!
   end
 
   private
@@ -100,16 +112,9 @@ class TimelapseActivityChecker
   # Single ffmpeg pass: sample at 1fps, convert to grayscale, compute consecutive frame
   # differences via shift-and-subtract, then detect black (inactive) frames.
   def run_ffmpeg_analysis(path)
-    filter = [
-      "[0:v]fps=#{SAMPLE_FPS},format=gray,split[a][b]",
-      "[a]trim=start_frame=1,setpts=PTS-STARTPTS[shifted]",
-      "[b][shifted]blend=all_mode=difference:eof_action=endall," \
-      "blackframe=amount=#{@blackframe_amount}:threshold=#{@blackframe_threshold}"
-    ].join(";")
-
     output, status = Open3.capture2e(
       "ffmpeg", "-i", path,
-      "-filter_complex", filter,
+      "-filter_complex", FILTER_COMPLEX,
       "-f", "null", "-"
     )
 
@@ -151,5 +156,24 @@ class TimelapseActivityChecker
 
   def empty_result
     { inactive_frames: 0, total_frames: 0, inactive_percentage: 0.0, segments: [] }
+  end
+
+  def prepare_ffmpeg_input(file)
+    input = Tempfile.new([ "ffmpeg_input_", ".mp4" ])
+    input.binmode
+
+    if file.respond_to?(:rewind)
+      file.rewind
+      IO.copy_stream(file, input)
+    else
+      IO.copy_stream(file.to_s, input.path)
+    end
+
+    input.rewind
+    input
+  rescue StandardError => e
+    ErrorReporter.capture_exception(e, contexts: { activity_check: { action: "prepare_ffmpeg_input" } })
+    input&.close!
+    nil
   end
 end
