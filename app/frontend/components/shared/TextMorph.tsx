@@ -64,23 +64,24 @@ export default function TextMorph({
 
   return (
     <Component className={cn(className)} aria-label={children} style={style}>
-      <AnimatePresence mode="popLayout" initial={false}>
-        {characters.map((character) => (
-          <motion.span
-            key={character.id}
-            layoutId={character.id}
-            className="inline-block"
-            aria-hidden="true"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={variants ?? defaultVariants}
-            transition={transition ?? defaultTransition}
-          >
-            {character.label}
-          </motion.span>
-        ))}
-      </AnimatePresence>
+      <span className="relative inline-flex whitespace-pre" aria-hidden="true">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {characters.map((character) => (
+            <motion.span
+              key={character.id}
+              layout="position"
+              className="inline-block"
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              variants={variants ?? defaultVariants}
+              transition={transition ?? defaultTransition}
+            >
+              {character.label}
+            </motion.span>
+          ))}
+        </AnimatePresence>
+      </span>
     </Component>
   )
 }
