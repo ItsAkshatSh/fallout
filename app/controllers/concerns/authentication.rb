@@ -76,6 +76,14 @@ module Authentication
   end
 
   def terminate_session
+    # Preserve return_to across session reset so post-auth redirects survive the OAuth flow
+    saved_return_to = session[:return_to]
     reset_session
+    session[:return_to] = saved_return_to if saved_return_to.present?
+  end
+
+  def redirect_to_return_to_or(default_path, **options)
+    target = session.delete(:return_to) || default_path
+    redirect_to target, **options
   end
 end

@@ -221,6 +221,9 @@ Rails.application.routes.draw do
     end
   end
 
+  # Universal invite link from emails — works for any auth state
+  get "i/:token" => "pending_collaboration_invites#show", as: :pending_invite
+
   # Top-level journal entry point — redirects to project-scoped route or shows project selection
   get "journal_entries/new" => "journal_entries#new", as: :new_journal_entry
   post "journal_entries/preview" => "journal_entries#preview", as: :preview_journal_entry

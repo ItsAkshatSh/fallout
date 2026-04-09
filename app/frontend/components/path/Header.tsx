@@ -4,6 +4,7 @@ import { usePage, router } from '@inertiajs/react'
 import { useModalStack } from '@inertiaui/modal-react'
 import type { SharedProps } from '@/types'
 import { useClickOutside } from '@/hooks/useClickOutside'
+import { notify } from '@/lib/notifications'
 
 type Props = {
   koiBalance: number
@@ -82,6 +83,10 @@ export default function Header({ koiBalance, avatar, displayName }: Props) {
           type="button"
           className="relative cursor-pointer"
           onClick={() => {
+            if (shared.auth.user?.is_trial) {
+              notify('alert', 'Please verify your account to access your mail.')
+              return
+            }
             if (shared.has_unread_mail) {
               new Audio('/sfx/youve-got-mail.mp3').play().catch(() => {})
             }

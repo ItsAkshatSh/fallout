@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_08_235300) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_09_202849) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -371,6 +371,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_08_235300) do
     t.bigint "user_id", null: false
     t.index ["user_id", "question_key"], name: "index_onboarding_responses_on_user_id_and_question_key", unique: true
     t.index ["user_id"], name: "index_onboarding_responses_on_user_id"
+  end
+
+  create_table "pending_collaboration_invites", force: :cascade do |t|
+    t.bigint "collaboration_invite_id"
+    t.datetime "created_at", null: false
+    t.datetime "discarded_at"
+    t.string "invitee_email", null: false
+    t.bigint "inviter_id", null: false
+    t.bigint "project_id", null: false
+    t.integer "status", default: 0, null: false
+    t.string "token", null: false
+    t.datetime "updated_at", null: false
+    t.index ["collaboration_invite_id"], name: "index_pending_collaboration_invites_on_collaboration_invite_id"
+    t.index ["discarded_at"], name: "index_pending_collaboration_invites_on_discarded_at"
+    t.index ["inviter_id"], name: "index_pending_collaboration_invites_on_inviter_id"
+    t.index ["project_id", "invitee_email", "status"], name: "idx_pending_collab_invites_on_project_email_status"
+    t.index ["project_id"], name: "index_pending_collaboration_invites_on_project_id"
+    t.index ["token"], name: "index_pending_collaboration_invites_on_token", unique: true
   end
 
   create_table "preflight_runs", force: :cascade do |t|
@@ -736,6 +754,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_08_235300) do
   add_foreign_key "mail_messages", "users"
   add_foreign_key "mail_messages", "users", column: "author_id"
   add_foreign_key "onboarding_responses", "users"
+  add_foreign_key "pending_collaboration_invites", "collaboration_invites"
+  add_foreign_key "pending_collaboration_invites", "projects"
+  add_foreign_key "pending_collaboration_invites", "users", column: "inviter_id"
   add_foreign_key "preflight_runs", "projects"
   add_foreign_key "project_flags", "projects"
   add_foreign_key "project_flags", "ships"

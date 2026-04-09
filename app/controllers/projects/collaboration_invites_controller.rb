@@ -9,14 +9,25 @@ class Projects::CollaborationInvitesController < ApplicationController
   def create
     authorize @project, :manage_collaborators? # Only project owner can send invites
 
-    # Always respond with the same success message to prevent email enumeration.
-    # Invalid emails, already-invited users, and duplicate invites all appear identical to the caller.
-    invitee = User.verified.kept.find_by(email: params[:email]&.strip&.downcase)
+    email = params[:email]&.strip&.downcase
 
-    if invitee
-      invite = @project.collaboration_invites.build(inviter: current_user, invitee: invitee)
-      if invite.save
-        MailDeliveryService.collaboration_invite_sent(invite)
+    # Always respond with the same success message to prevent email enumeration.
+    # Invalid emails, self-invites, duplicates, and unknown addresses all appear identical.
+    if email.present? && email.match?(URI::MailTo::EMAIL_REGEXP) && email != @project.user.email&.downcase
+      unless PendingCollaborationInvite.pending.exists?(project: @project, invitee_email: email)
+        pending = @project.pending_collaboration_invites.build(inviter: current_user, invitee_email: email)
+
+        if pending.save
+          # If a verified user with this email exists, immediately claim (creates real invite + MailMessage)
+          invitee = User.verified.kept.find_by(email: email)
+          pending.claim!(invitee) if invitee
+
+          if invitee
+            CollaborationInviteMailer.with(pending_invite: pending, invitee: invitee).invite_existing_user.deliver_later
+          else
+            CollaborationInviteMailer.with(pending_invite: pending).invite_new_user.deliver_later
+          end
+        end
       end
     end
 
@@ -27,6 +38,10 @@ class Projects::CollaborationInvitesController < ApplicationController
     invite = @project.collaboration_invites.find(params[:id])
     authorize invite, :revoke? # Only inviter/admin can revoke a pending invite
     invite.revoked!
+
+    # Also revoke the associated pending invite so the email link shows "withdrawn"
+    PendingCollaborationInvite.pending.where(collaboration_invite: invite).find_each(&:revoked!)
+
     redirect_back fallback_location: project_path(@project), notice: "Invite revoked."
   end
 

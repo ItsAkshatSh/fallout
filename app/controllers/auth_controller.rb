@@ -71,6 +71,9 @@ class AuthController < ApplicationController
         SlackChannelInviteJob.perform_later(user.slack_id, User::SLACK_WELCOME_CHANNELS)
       end
 
+      # Claim any pending collaboration invites matching this user's email
+      PendingCollaborationInvite.claim_all_for_email!(user.email, user)
+
       terminate_session
       session[:user_id] = user.id
 
@@ -82,7 +85,7 @@ class AuthController < ApplicationController
         }.to_json)
       end
 
-      redirect_to root_path, notice: "Welcome back, #{user.display_name}!"
+      redirect_to_return_to_or(root_path, notice: "Welcome back, #{user.display_name}!")
     rescue StandardError => e
       ErrorReporter.capture_exception(e)
       redirect_to root_path, alert: "Authentication failed. Please try again."

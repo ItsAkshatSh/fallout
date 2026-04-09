@@ -99,6 +99,11 @@ class OnboardingController < ApplicationController
 
   def complete_onboarding
     current_user.update!(onboarded: true)
-    redirect_to path_path, notice: "Welcome to the path!"
+    # If the user arrived via a collaboration invite link, nudge them toward the mailbox
+    if session[:return_to]&.start_with?("/i/")
+      redirect_to path_path, notice: "Click on the letter in the top right to accept your invite!"
+    else
+      redirect_to path_path, notice: "Welcome to the path!"
+    end
   end
 end
