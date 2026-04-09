@@ -49,9 +49,18 @@ export default function Header({ koiBalance, avatar, displayName }: Props) {
           <div
             aria-hidden={!isOpen}
             className={`bg-dark-brown overflow-hidden transition-all duration-200 rounded-bl-2xl -mt-5 xs:-mt-8 pt-8  ${
-              isOpen ? 'max-h-24 rounded-br-4xl' : 'max-h-0 rounded-br-[3rem]'
+              isOpen ? 'max-h-48 rounded-br-4xl' : 'max-h-0 rounded-br-[3rem]'
             }`}
           >
+            {shared.auth.user?.is_staff && (
+              <a
+                href="/admin"
+                tabIndex={isOpen ? 0 : -1}
+                className="text-light-brown w-full pl-10 pr-5 py-3 text-left text-lg hover:brightness-150 transition-all cursor-pointer block"
+              >
+                Admin
+              </a>
+            )}
             <button
               type="button"
               tabIndex={isOpen ? 0 : -1}
