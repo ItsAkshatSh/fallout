@@ -8,6 +8,7 @@ const REVEAL_DELAY_MS = 1600
 
 type CritterProps = {
   id: number
+  variant: string
   image_path: string
   spun: boolean
 }
@@ -21,15 +22,65 @@ export default function CritterShow({ critter, clearing_path }: PageProps) {
   const [revealed, setRevealed] = useState(false)
   const [ready, setReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
+    let imageReady = false
+    let videoReady = false
+    let audioReady = false
+
+    const checkAll = () => {
+      if (imageReady && videoReady && audioReady) setReady(true)
+    }
+
     const img = new Image()
     img.src = critter.image_path
     if (img.complete) {
-      setReady(true)
+      imageReady = true
     } else {
-      img.onload = () => setReady(true)
+      img.onload = () => {
+        imageReady = true
+        checkAll()
+      }
     }
+
+    const video = videoRef.current
+    if (video) {
+      if (video.readyState >= 3) {
+        videoReady = true
+      } else {
+        video.addEventListener(
+          'canplay',
+          () => {
+            videoReady = true
+            checkAll()
+          },
+          { once: true },
+        )
+      }
+    } else {
+      videoReady = true
+    }
+
+    const audio = audioRef.current
+    if (audio) {
+      if (audio.readyState >= 3) {
+        audioReady = true
+      } else {
+        audio.addEventListener(
+          'canplay',
+          () => {
+            audioReady = true
+            checkAll()
+          },
+          { once: true },
+        )
+      }
+    } else {
+      audioReady = true
+    }
+
+    checkAll()
   }, [critter.image_path])
 
   useEffect(() => {
@@ -38,6 +89,12 @@ export default function CritterShow({ critter, clearing_path }: PageProps) {
     if (!video) return
 
     video.play()
+
+    const audio = audioRef.current
+    audio?.play().catch(() => {
+      const playAudio = () => audio?.play().catch(() => {})
+      document.addEventListener('click', playAudio, { once: true })
+    })
 
     let timer: ReturnType<typeof setTimeout>
     const onPlay = () => {
@@ -62,6 +119,10 @@ export default function CritterShow({ critter, clearing_path }: PageProps) {
       videoRef.current.currentTime = 0
       videoRef.current.play()
     }
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0
+      audioRef.current.play().catch(() => {})
+    }
     setTimeout(() => setRevealed(true), REVEAL_DELAY_MS)
   }
 
@@ -76,6 +137,7 @@ export default function CritterShow({ critter, clearing_path }: PageProps) {
           playsInline
           className="absolute inset-0 h-full w-full object-cover"
         />
+        <audio ref={audioRef} src={`/sfx/spin/${critter.variant}.mp3`} preload="auto" />
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <div
